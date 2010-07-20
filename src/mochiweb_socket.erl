@@ -23,8 +23,8 @@ listen(Ssl, Port, Opts, SslOpts) ->
     end.
 
 accept({ssl, ListenSocket}) ->
-    % There's a bug in ssl:transport_accept/2 at the moment, which is the
-    % reason for the try...catch block. Should be fixed in OTP R14.
+    %% There's a bug in ssl:transport_accept/2 at the moment, which is the
+    %% reason for the try...catch block. Should be fixed in OTP R14.
     try ssl:transport_accept(ListenSocket) of
         {ok, Socket} ->
             case ssl:ssl_accept(Socket) of
