@@ -86,13 +86,12 @@ default_body(Req) ->
     default_body(Req, Req:get(method), Req:get(path)).
 
 loop(Socket, Body) ->
-    mochiweb_socket:setopts(Socket, [{packet, http}]),
     request(Socket, Body).
 
 request(Socket, Body) ->
+    mochiweb_socket:setopts(Socket, [{active, false}, {packet, http}]),
     case mochiweb_socket:recv(Socket, 0, ?REQUEST_RECV_TIMEOUT) of
         {ok, {http_request, Method, Path, Version}} ->
-            mochiweb_socket:setopts(Socket, [{packet, httph}]),
             headers(Socket, {Method, Path, Version}, [], Body, 0);
         {error, {http_error, "\r\n"}} ->
             request(Socket, Body);
@@ -115,14 +114,12 @@ reentry(Body) ->
 
 headers(Socket, Request, Headers, _Body, ?MAX_HEADERS) ->
     %% Too many headers sent, bad request.
-    mochiweb_socket:setopts(Socket, [{packet, raw}]),
     handle_invalid_request(Socket, Request, Headers);
 headers(Socket, Request, Headers, Body, HeaderCount) ->
+    mochiweb_socket:setopts(Socket, [{active, false}, {packet, httph}]),
     case mochiweb_socket:recv(Socket, 0, ?HEADERS_RECV_TIMEOUT) of
         {ok, http_eoh} ->
-            mochiweb_socket:setopts(Socket, [{packet, raw}]),
-            Req = mochiweb:new_request({Socket, Request,
-                                        lists:reverse(Headers)}),
+            Req = new_request({Socket, Request, Headers}),
             call_body(Body, Req),
             ?MODULE:after_response(Body, Req);
         {ok, {http_header, _, Name, _, Value}} ->
@@ -140,13 +137,15 @@ call_body({M, F}, Req) ->
 call_body(Body, Req) ->
     Body(Req).
 
+new_request({Socket, Request, RevHeaders}) ->
+    mochiweb_socket:setopts(Socket, [{active, false}, {packet, raw}]),
+    mochiweb:new_request({Socket, Request, lists:reverse(RevHeaders)}).
+
 handle_invalid_request(Socket) ->
     handle_invalid_request(Socket, {'GET', {abs_path, "/"}, {0,9}}, []).
 
 handle_invalid_request(Socket, Request, RevHeaders) ->
-    mochiweb_socket:setopts(Socket, [{packet, raw}]),
-    Req = mochiweb:new_request({Socket, Request,
-                                lists:reverse(RevHeaders)}),
+    Req = new_request({Socket, Request, RevHeaders}),
     Req:respond({400, [], []}),
     mochiweb_socket:close(Socket),
     exit(normal).
