@@ -88,23 +88,35 @@ default_body(Req) ->
 loop(Socket, Body) ->
     request(Socket, Body).
 
+socket_mode(Socket) ->
+    case mochiweb_socket:type(Socket) of
+        ssl ->
+            ssl;
+        plain ->
+            http
+    end.
+
 request(Socket, Body) ->
-    mochiweb_socket:setopts(Socket, [{active, false}, {packet, http}]),
-    case mochiweb_socket:recv(Socket, 0, ?REQUEST_RECV_TIMEOUT) of
-        {ok, {http_request, Method, Path, Version}} ->
-            headers(Socket, {Method, Path, Version}, [], Body, 0);
-        {error, {http_error, "\r\n"}} ->
+    mochiweb_socket:setopts(Socket, [{active, once}, {packet, http}]),
+    Mode = socket_mode(Socket),
+    receive
+        {Mode, _Port, {http_request, Method, Path, Version}} ->
+            headers(Socket, {Method, Path, Version}, Body);
+        {Mode, _Port, {http_error, "\r\n"}} ->
             request(Socket, Body);
-        {error, {http_error, "\n"}} ->
+        {Mode, _Port, {http_error, "\n"}} ->
             request(Socket, Body);
-        {error, closed} ->
+        {tcp_closed, _Port} ->
             mochiweb_socket:close(Socket),
             exit(normal);
-        {error, timeout} ->
-            mochiweb_socket:close(Socket),
-            exit(normal);
+        {_Mode, _Port, {http_error, _}} ->
+            handle_invalid_request(Socket);
         _Other ->
-            handle_invalid_request(Socket)
+            mochiweb_socket:close(Socket),
+            exit(normal)
+    after ?REQUEST_RECV_TIMEOUT ->
+            mochiweb_socket:close(Socket),
+            exit(normal)
     end.
 
 reentry(Body) ->
@@ -112,24 +124,35 @@ reentry(Body) ->
             ?MODULE:after_response(Body, Req)
     end.
 
+headers(Socket, {Method, Path, Version}, Body) ->
+    mochiweb_socket:setopts(Socket, [{packet, httph}]),
+    headers(Socket, {Method, Path, Version}, [], Body, 0).
+
 headers(Socket, Request, Headers, _Body, ?MAX_HEADERS) ->
     %% Too many headers sent, bad request.
     handle_invalid_request(Socket, Request, Headers);
 headers(Socket, Request, Headers, Body, HeaderCount) ->
-    mochiweb_socket:setopts(Socket, [{active, false}, {packet, httph}]),
-    case mochiweb_socket:recv(Socket, 0, ?HEADERS_RECV_TIMEOUT) of
-        {ok, http_eoh} ->
+    mochiweb_socket:setopts(Socket, [{active, once}]),
+    Mode = socket_mode(Socket),
+    receive
+        {Mode, _Port, http_eoh} ->
             Req = new_request({Socket, Request, Headers}),
             call_body(Body, Req),
             ?MODULE:after_response(Body, Req);
-        {ok, {http_header, _, Name, _, Value}} ->
+        {Mode, _Port, {http_header, _, Name, _, Value}} ->
             headers(Socket, Request, [{Name, Value} | Headers], Body,
                     1 + HeaderCount);
-        {error, closed} ->
+        {tcp_closed, _Port} ->
             mochiweb_socket:close(Socket),
             exit(normal);
+        {_Mode, _Port, {http_error, _}} ->
+            handle_invalid_request(Socket);
         _Other ->
-            handle_invalid_request(Socket, Request, Headers)
+            mochiweb_socket:close(Socket),
+            exit(normal)
+    after ?HEADERS_RECV_TIMEOUT ->
+            mochiweb_socket:close(Socket),
+            exit(normal)
     end.
 
 call_body({M, F}, Req) ->
