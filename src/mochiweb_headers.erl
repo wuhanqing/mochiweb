@@ -165,7 +165,7 @@ delete_any(K, T) ->
 %% Internal API
 
 expand({array, L}) ->
-    mochiweb_util:join(lists:reverse(L), ", ");
+    string:join(lists:reverse(L), ", ");
 expand(V) ->
     V.
 

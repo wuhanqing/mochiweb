@@ -304,17 +304,23 @@ path_split([C | Rest], Acc) ->
 
 %% @spec urlunsplit({Scheme, Netloc, Path, Query, Fragment}) -> string()
 %% @doc Assemble a URL from the 5-tuple. Path must be absolute.
+urlunsplit({"", Netloc, Path, Query, Fragment}) ->
+    Netloc ++ urlunsplit_path({Path, Query, Fragment});
+urlunsplit({Scheme, Netloc, Path, "", ""}) ->
+    Scheme ++ "://" ++ Netloc ++ Path;
 urlunsplit({Scheme, Netloc, Path, Query, Fragment}) ->
-    lists:flatten([case Scheme of "" -> "";  _ -> [Scheme, "://"] end,
-                   Netloc,
-                   urlunsplit_path({Path, Query, Fragment})]).
+    Scheme ++ "://" ++ Netloc ++ urlunsplit_path({Path, Query, Fragment}).
 
 %% @spec urlunsplit_path({Path, Query, Fragment}) -> string()
 %% @doc Assemble a URL path from the 3-tuple.
+urlunsplit_path({Path, "", ""}) ->
+    Path;
+urlunsplit_path({Path, Query, ""}) ->
+    Path ++ [$? | Query];
+urlunsplit_path({Path, "", Fragment}) ->
+    Path ++ [$# | Fragment];
 urlunsplit_path({Path, Query, Fragment}) ->
-    lists:flatten([Path,
-                   case Query of "" -> ""; _ -> [$? | Query] end,
-                   case Fragment of "" -> ""; _ -> [$# | Fragment] end]).
+    Path ++ [$? | Query] ++ [$# | Fragment].
 
 %% @spec urlsplit_path(Url) -> {Path, Query, Fragment}
 %% @doc Return a 3-tuple, does not expand % escapes. Only supports HTTP style
