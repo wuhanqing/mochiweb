@@ -18,7 +18,7 @@
 %% @spec empty() -> headers()
 %% @doc Create an empty headers structure.
 empty() ->
-    gb_trees:empty().
+    {mochiweb_headers, []}.
 
 %% @spec make(headers() | [{key(), value()}]) -> headers()
 %% @doc Construct a headers() from the given list.
@@ -80,24 +80,36 @@ default_from_list(List, T) ->
 %% @doc Return the contents of the headers. The keys will be the exact key
 %%      that was first inserted (e.g. may be an atom or binary, case is
 %%      preserved).
-to_list(T) ->
-    F = fun ({K, {array, L}}, Acc) ->
+to_list({mochiweb_headers, TL}) ->
+    F = fun ({_NK, K, {array, L}}, Acc) ->
                 L1 = lists:reverse(L),
                 lists:foldl(fun (V, Acc1) -> [{K, V} | Acc1] end, Acc, L1);
-            (Pair, Acc) ->
-                [Pair | Acc]
+            ({_NK, K, V}, Acc) ->
+                [{K, V} | Acc]
         end,
-    lists:reverse(lists:foldl(F, [], gb_trees:values(T))).
+    lists:reverse(lists:foldl(F, [], lists:sort(TL))).
 
 %% @spec get_value(key(), headers()) -> string() | undefined
 %% @doc Return the value of the given header using a case insensitive search.
 %%      undefined will be returned for keys that are not present.
-get_value(K, T) ->
-    case lookup(K, T) of
-        {value, {_, V}} ->
-            expand(V);
-        none ->
-            undefined
+get_value(K, {mochiweb_headers, TL}) when is_atom(K) ->
+    case lists:keyfind(K, 2, TL) of
+        false ->
+            case lists:keyfind(normalize(K), 1, TL) of
+                false ->
+                    undefined;
+                {_NK, _K, V} ->
+                    expand(V)
+            end;
+        {_NK, _K, V} ->
+            expand(V)
+    end;
+get_value(K, {mochiweb_headers, TL}) ->
+    case lists:keyfind(normalize(K), 1, TL) of
+        false ->
+            undefined;
+        {_NK, _K, V} ->
+            expand(V)
     end.
 
 %% @spec get_primary_value(key(), headers()) -> string() | undefined
@@ -116,51 +128,65 @@ get_primary_value(K, T) ->
 %% @doc Return the case preserved key and value for the given header using
 %%      a case insensitive search. none will be returned for keys that are
 %%      not present.
-lookup(K, T) ->
-    case gb_trees:lookup(normalize(K), T) of
-        {value, {K0, V}} ->
+lookup(K, {mochiweb_headers, TL}) when is_atom(K) ->
+    case lists:keyfind(K, 2, TL) of
+        {_NK, _K, V} ->
+            {value, {K, expand(V)}};
+        false ->
+            case lists:keyfind(normalize(K), 1, TL) of
+                {_NK, K0, V} ->
+                    {value, {K0, expand(V)}};
+                false ->
+                    none
+            end
+    end;
+lookup(K, {mochiweb_headers, TL}) ->
+    case lists:keyfind(normalize(K), 1, TL) of
+        {_NK, K0, V} ->
             {value, {K0, expand(V)}};
-        none ->
+        false ->
             none
     end.
 
 %% @spec default(key(), value(), headers()) -> headers()
 %% @doc Insert the pair into the headers if it does not already exist.
-default(K, V, T) ->
+default(K, V, T={mochiweb_headers, TL}) ->
     K1 = normalize(K),
     V1 = any_to_list(V),
-    try gb_trees:insert(K1, {K, V1}, T)
-    catch
-        error:{key_exists, _} ->
+    case lists:keymember(K1, 1, TL) of
+        false ->
+            {mochiweb_headers, [{K1, K, V1} | TL]};
+        true ->
             T
     end.
 
 %% @spec enter(key(), value(), headers()) -> headers()
 %% @doc Insert the pair into the headers, replacing any pre-existing key.
-enter(K, V, T) ->
+enter(K, V, {mochiweb_headers, TL}) ->
     K1 = normalize(K),
     V1 = any_to_list(V),
-    gb_trees:enter(K1, {K, V1}, T).
+    {mochiweb_headers, lists:keystore(K1, 1, TL, {K1, K, V1})}.
 
 %% @spec insert(key(), value(), headers()) -> headers()
 %% @doc Insert the pair into the headers, merging with any pre-existing key.
 %%      A merge is done with Value = V0 ++ ", " ++ V1.
-insert(K, V, T) ->
+insert(K, V, {mochiweb_headers, TL}) ->
     K1 = normalize(K),
     V1 = any_to_list(V),
-    try gb_trees:insert(K1, {K, V1}, T)
-    catch
-        error:{key_exists, _} ->
-            {K0, V0} = gb_trees:get(K1, T),
-            V2 = merge(K1, V1, V0),
-            gb_trees:update(K1, {K0, V2}, T)
-    end.
+    {mochiweb_headers, insert2(K1, TL, K, V1)}.
+
+insert2(Key, [{Key, K0, V0} | TL], _K1, V1) ->
+    [{Key, K0, merge(Key, V1, V0)} | TL];
+insert2(Key, [H | TL], K1, V1) ->
+    [H | insert2(Key, TL, K1, V1)];
+insert2(Key, [], K1, V1) ->
+    [{Key, K1, V1}].
 
 %% @spec delete_any(key(), headers()) -> headers()
 %% @doc Delete the header corresponding to key if it is present.
-delete_any(K, T) ->
+delete_any(K, {mochiweb_headers, TL}) ->
     K1 = normalize(K),
-    gb_trees:delete_any(K1, T).
+    {mochiweb_headers, lists:keydelete(K1, 1, TL)}.
 
 %% Internal API
 
@@ -178,10 +204,62 @@ merge(_, V1, V0) ->
 
 normalize(K) when is_list(K) ->
     string:to_lower(K);
-normalize(K) when is_atom(K) ->
-    normalize(atom_to_list(K));
 normalize(K) when is_binary(K) ->
-    normalize(binary_to_list(K)).
+    normalize(binary_to_list(K));
+normalize('Cache-Control') -> "cache-control";
+normalize('Connection') -> "connection";
+normalize('Date') -> "date";
+normalize('Pragma') -> "pragma";
+normalize('Transfer-Encoding') -> "transfer-encoding";
+normalize('Upgrade') -> "upgrade";
+normalize('Via') -> "via";
+normalize('Accept') -> "accept";
+normalize('Accept-Charset') -> "accept-charset";
+normalize('Accept-Encoding') -> "accept-encoding";
+normalize('Accept-Language') -> "accept-language";
+normalize('Authorization') -> "authorization";
+normalize('From') -> "from";
+normalize('Host') -> "host";
+normalize('If-Modified-Since') -> "if-modified-since";
+normalize('If-Match') -> "if-match";
+normalize('If-None-Match') -> "if-none-match";
+normalize('If-Range') -> "if-range";
+normalize('If-Unmodified-Since') -> "if-unmodified-since";
+normalize('Max-Forwards') -> "max-forwards";
+normalize('Proxy-Authorization') -> "proxy-authorization";
+normalize('Range') -> "range";
+normalize('Referer') -> "referer";
+normalize('User-Agent') -> "user-agent";
+normalize('Age') -> "age";
+normalize('Location') -> "location";
+normalize('Proxy-Authenticate') -> "proxy-authenticate";
+normalize('Public') -> "public";
+normalize('Retry-After') -> "retry-after";
+normalize('Server') -> "server";
+normalize('Vary') -> "vary";
+normalize('Warning') -> "warning";
+normalize('Www-Authenticate') -> "www-authenticate";
+normalize('Allow') -> "allow";
+normalize('Content-Base') -> "content-base";
+normalize('Content-Encoding') -> "content-encoding";
+normalize('Content-Language') -> "content-language";
+normalize('Content-Length') -> "content-length";
+normalize('Content-Location') -> "content-location";
+normalize('Content-Md5') -> "content-md5";
+normalize('Content-Range') -> "content-range";
+normalize('Content-Type') -> "content-type";
+normalize('Etag') -> "etag";
+normalize('Expires') -> "expires";
+normalize('Last-Modified') -> "last-modified";
+normalize('Accept-Ranges') -> "accept-ranges";
+normalize('Set-Cookie') -> "set-cookie";
+normalize('Set-Cookie2') -> "set-cookie2";
+normalize('X-Forwarded-For') -> "x-forwarded-for";
+normalize('Cookie') -> "cookie";
+normalize('Keep-Alive') -> "keep-alive";
+normalize('Proxy-Connection') -> "proxy-connection";
+normalize(K) when is_atom(K) ->
+    normalize(atom_to_list(K)).
 
 any_to_list(V) when is_list(V) ->
     V;

@@ -81,14 +81,14 @@ get(headers) ->
 get(peer) ->
     case mochiweb_socket:peername(Socket) of
         {ok, {Addr={10, _, _, _}, _Port}} ->
-            case get_header_value("x-forwarded-for") of
+            case get_header_value('X-Forwarded-For') of
                 undefined ->
                     inet_parse:ntoa(Addr);
                 Hosts ->
                     string:strip(lists:last(string:tokens(Hosts, ",")))
             end;
         {ok, {{127, 0, 0, 1}, _Port}} ->
-            case get_header_value("x-forwarded-for") of
+            case get_header_value('X-Forwarded-For') of
                 undefined ->
                     "127.0.0.1";
                 Hosts ->
@@ -119,7 +119,7 @@ get(body_length) ->
             Cached
     end;
 get(range) ->
-    case get_header_value(range) of
+    case get_header_value('Range') of
         undefined ->
             undefined;
         RawRange ->
@@ -166,9 +166,9 @@ recv(Length, Timeout) ->
 %% @spec body_length() -> undefined | chunked | unknown_transfer_encoding | integer()
 %% @doc  Infer body length from transfer-encoding and content-length headers.
 body_length() ->
-    case get_header_value("transfer-encoding") of
+    case get_header_value('Transfer-Encoding') of
         undefined ->
-            case get_header_value("content-length") of
+            case get_header_value('Content-Length') of
                 undefined ->
                     undefined;
                 Length ->
@@ -214,7 +214,7 @@ stream_body(MaxChunkSize, ChunkFun, FunState) ->
     stream_body(MaxChunkSize, ChunkFun, FunState, undefined).
 
 stream_body(MaxChunkSize, ChunkFun, FunState, MaxBodyLength) ->
-    Expect = case get_header_value("expect") of
+    Expect = case get_header_value('Expect') of
                  undefined ->
                      undefined;
                  Value when is_list(Value) ->
@@ -385,16 +385,16 @@ should_close() ->
     DidNotRecv = erlang:get(mochiweb_request_recv) =:= undefined,
     ForceClose orelse Version < {1, 0}
         %% Connection: close
-        orelse get_header_value("connection") =:= "close"
+        orelse get_header_value('Connection') =:= "close"
         %% HTTP 1.0 requires Connection: Keep-Alive
         orelse (Version =:= {1, 0}
-                andalso get_header_value("connection") =/= "Keep-Alive")
+                andalso get_header_value('Connection') =/= "Keep-Alive")
         %% unread data left on the socket, can't safely continue
         orelse (DidNotRecv
-                andalso get_header_value("content-length") =/= undefined
-                andalso list_to_integer(get_header_value("content-length")) > 0)
+                andalso get_header_value('Content-Length') =/= undefined
+                andalso list_to_integer(get_header_value('Content-Length')) > 0)
         orelse (DidNotRecv
-                andalso get_header_value("transfer-encoding") =:= "chunked").
+                andalso get_header_value('Transfer-Encoding') =:= "chunked").
 
 %% @spec cleanup() -> ok
 %% @doc Clean up any junk in the process dictionary, required before continuing
@@ -432,7 +432,7 @@ get_cookie_value(Key) ->
 parse_cookie() ->
     case erlang:get(?SAVE_COOKIE) of
         undefined ->
-            Cookies = case get_header_value("cookie") of
+            Cookies = case get_header_value('Cookie') of
                           undefined ->
                               [];
                           Value ->
@@ -454,7 +454,7 @@ parse_post() ->
                          undefined ->
                              [];
                          Binary ->
-                             case get_primary_header_value("content-type") of
+                             case get_primary_header_value('Content-Type') of
                                  "application/x-www-form-urlencoded" ++ _ ->
                                      mochiweb_util:parse_qs(Binary);
                                  _ ->
@@ -601,7 +601,7 @@ maybe_serve_file(File, ExtraHeaders) ->
     case file:read_file_info(File) of
         {ok, FileInfo} ->
             LastModified = httpd_util:rfc1123_date(FileInfo#file_info.mtime),
-            case get_header_value("if-modified-since") of
+            case get_header_value('If-Modified-Since') of
                 LastModified ->
                     respond({304, ExtraHeaders, ""});
                 _ ->
@@ -692,7 +692,7 @@ range_parts(Body0, Ranges) ->
 %%            ["deflate", "gzip", "identity"]
 %%
 accepted_encodings(SupportedEncodings) ->
-    AcceptEncodingHeader = case get_header_value("Accept-Encoding") of
+    AcceptEncodingHeader = case get_header_value('Accept-Encoding') of
         undefined ->
             "";
         Value ->
