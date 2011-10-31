@@ -55,8 +55,8 @@ start_link(Options) ->
     mochiweb_socket_server:start_link(parse_options(Options)).
 
 loop(Socket, Body) ->
-    ok = mochiweb_socket:setopts(Socket, [{packet, line}]),
-    request(Socket, Body, <<>>, 0, ?MAX_HEADER_BYTES).
+    loop(Socket, Body, ?MAX_HEADER_BYTES).
+
 loop(Socket, Body, MaxHdrBytes) ->
     ok = mochiweb_socket:setopts(Socket, [{packet, line}]),
     request(Socket, Body, <<>>, 0, MaxHdrBytes).
@@ -68,7 +68,7 @@ request(Socket, Body, Prev, HdrBytes, MaxHdrBytes) ->
             FullBin = <<Prev/binary, Bin/binary>>,
             case erlang:decode_packet(http, FullBin, []) of
                 {ok, {http_request, Method, Path, Version}, <<>>} ->
-                    NewHdrBytes = size(FullBin) + HdrBytes,
+                    NewHdrBytes = byte_size(FullBin) + HdrBytes,
                     collect_headers(Socket, {Method, Path, Version}, Body,
                                     <<>>, false, 0, NewHdrBytes, MaxHdrBytes);
                 {error, {http_error, "\r\n"}} ->
@@ -76,7 +76,7 @@ request(Socket, Body, Prev, HdrBytes, MaxHdrBytes) ->
                 {error, {http_error, "\n"}} ->
                     request(Socket, Body, <<>>, 0, MaxHdrBytes);
                 {more, _} ->
-                    request(Socket, Body, FullBin, size(FullBin), MaxHdrBytes)
+                    request(Socket, Body, FullBin, byte_size(FullBin), MaxHdrBytes)
             end;
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
@@ -110,7 +110,7 @@ collect_headers(Socket, Request, Body, Collected, Trunc,
     ok = mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
         {Protocol, _, More} when Protocol =:= tcp orelse Protocol =:= ssl ->
-            NewHdrBytes = HdrBytes + size(More),
+            NewHdrBytes = HdrBytes + byte_size(More),
             if
                 NewHdrBytes >= MaxHdrBytes ->
                     handle_invalid_request(Socket, Request, []);
@@ -126,7 +126,7 @@ collect_headers(Socket, Request, Body, Collected, Trunc,
                                           <<Collected/binary, "\r\n">>, []);
                         {_, More} ->
                             NewBin = <<Collected/binary, More/binary>>,
-                            AllButOne= size(More) - 1,
+                            AllButOne = byte_size(More) - 1,
                             {Truncated, NewHdrCount} =
                                 case More of
                                     <<_:AllButOne/binary, "\n">> ->
