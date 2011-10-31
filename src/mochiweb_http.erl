@@ -312,63 +312,10 @@ range_skip_length_test() ->
                  range_skip_length({BodySize, none}, BodySize)),
     ok.
 
-long_request_line_test() ->
-    {ok, LS} = gen_tcp:listen(0, [binary, {active, false}]),
-    {ok, Port} = inet:port(LS),
-    spawn_link(fun() ->
-                       {ok, S} = gen_tcp:accept(LS),
-                       try
-                           loop(S, fun(Req) ->
-                                           Req:ok({"text/plain", "ok"})
-                                   end)
-                       after
-                           gen_tcp:close(S),
-                           gen_tcp:close(LS)
-                       end
-               end),
-    {ok, S} = gen_tcp:connect("localhost", Port, [binary, {active, false}]),
-    try
-        Req = "GET /" ++ string:chars($X, 8192) ++ " HTTP/1.1\r\n"
-            ++ "Host: localhost\r\n\r\n",
-        ok = gen_tcp:send(S, Req),
-        inet:setopts(S, [{packet, http}]),
-        ?assertEqual({ok, {http_response, {1,1}, 200, "OK"}},
-                     gen_tcp:recv(S, 0)),
-        ok
-    after
-        gen_tcp:close(S)
-    end.
+fake_req(ReqBytes) ->
+    fake_req(?MAX_HEADER_BYTES, ReqBytes).
 
-long_header_test() ->
-    {ok, LS} = gen_tcp:listen(0, [binary, {active, false}]),
-    {ok, Port} = inet:port(LS),
-    spawn_link(fun() ->
-                       {ok, S} = gen_tcp:accept(LS),
-                       try
-                           loop(S, fun(Req) ->
-                                           Req:ok({"text/plain", "ok"})
-                                   end)
-                       after
-                           gen_tcp:close(S),
-                           gen_tcp:close(LS)
-                       end
-               end),
-    {ok, S} = gen_tcp:connect("localhost", Port, [binary, {active, false}]),
-    try
-        Req = "GET / HTTP/1.1\r\n"
-            ++ "Host: localhost\r\n"
-            ++ "Link: /" ++ string:chars($X, 8192) ++ "\r\n\r\n",
-        ok = gen_tcp:send(S, Req),
-        inet:setopts(S, [{packet, http}]),
-        ?assertEqual({ok, {http_response, {1,1}, 200, "OK"}},
-                     gen_tcp:recv(S, 0)),
-        ok
-    after
-        gen_tcp:close(S)
-    end.
-
-max_header_bytes_test() ->
-    MaxHdrBytes = 100,
+fake_req(MaxHdrBytes, ReqBytes) ->
     {ok, LS} = gen_tcp:listen(0, [binary, {active, false}]),
     {ok, Port} = inet:port(LS),
     spawn_link(fun() ->
@@ -383,17 +330,49 @@ max_header_bytes_test() ->
                            gen_tcp:close(LS)
                        end
                end),
-    {ok, S} = gen_tcp:connect("localhost", Port, [binary, {active, false}]),
+    {ok, S} = gen_tcp:connect("127.0.0.1", Port, [binary, {active, false}]),
     try
-        Req = "GET /" ++ string:chars($X, MaxHdrBytes-20) ++ " HTTP/1.1\r\n"
-            ++ "Host: localhost\r\n\r\n",
-        ok = gen_tcp:send(S, Req),
+        ok = gen_tcp:send(S, ReqBytes),
         inet:setopts(S, [{packet, http}]),
-        ?assertEqual({ok, {http_response, {1,1}, 400, "Bad Request"}},
-                     gen_tcp:recv(S, 0)),
-        ok
+        gen_tcp:recv(S, 0)
     after
         gen_tcp:close(S)
     end.
+
+loop_test_() ->
+    [{"long request line (max = 256KiB)",
+      ?_assertEqual(
+         {ok, {http_response, {1,1}, 200, "OK"}},
+         fake_req(
+           "GET /" ++ string:chars($X, 8192) ++ " HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n\r\n"))},
+     {"long header line (max = 256KiB)",
+      ?_assertEqual(
+         {ok, {http_response, {1,1}, 200, "OK"}},
+         fake_req(
+           "GET / HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n"
+           ++ "Link: /" ++ string:chars($X, 8192) ++ "\r\n\r\n"))},
+     {"incomplete req too long (max = 100B)",
+      ?_assertEqual(
+         {ok, {http_response, {1,1}, 400, "Bad Request"}},
+         fake_req(
+           100,
+           "GET /" ++ string:chars($X, 8192) ++ " HTTP/1.1"))},
+     {"incomplete req + header too long (max = 100B)",
+      ?_assertEqual(
+         {ok, {http_response, {1,1}, 400, "Bad Request"}},
+         fake_req(
+           100,
+           "GET / HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n"
+           ++ "Link: /" ++ string:chars($X, 8192)))},
+     {"complete req + header too long (max = 100B)",
+      ?_assertEqual(
+         {ok, {http_response, {1,1}, 400, "Bad Request"}},
+         fake_req(
+           100,
+           "GET /" ++ string:chars($X, 80) ++ " HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n\r\n"))}].
 
 -endif.
