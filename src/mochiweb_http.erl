@@ -87,8 +87,8 @@ request(Socket, Body, Prev, HdrBytes, MaxHdrBytes) ->
         _Other ->
             handle_invalid_request(Socket)
     after ?REQUEST_RECV_TIMEOUT ->
-        mochiweb_socket:close(Socket),
-        exit(normal)
+            mochiweb_socket:close(Socket),
+            exit(normal)
     end.
 
 reentry(Body) ->
@@ -148,8 +148,8 @@ collect_headers(Socket, Request, Body, Collected, Trunc,
         _Other ->
             handle_invalid_request(Socket, Request, [])
     after ?HEADERS_RECV_TIMEOUT ->
-        mochiweb_socket:close(Socket),
-        exit(normal)
+            mochiweb_socket:close(Socket),
+            exit(normal)
     end.
 
 parse_headers(Socket, Request, Body, <<"\r\n">>, Headers) ->
