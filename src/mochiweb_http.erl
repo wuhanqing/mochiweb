@@ -318,10 +318,12 @@ fake_req(ReqBytes) ->
 fake_req(MaxHdrBytes, ReqBytes) ->
     {ok, LS} = gen_tcp:listen(0, [binary, {active, false}]),
     {ok, Port} = inet:port(LS),
+    Self = self(),
     spawn_link(fun() ->
                        {ok, S} = gen_tcp:accept(LS),
                        try
                            loop(S, fun(Req) ->
+                                           Self ! {link_header, Req:get_header_value("Link")},
                                            Req:ok({"text/plain", "ok"})
                                    end,
                                 MaxHdrBytes)
@@ -334,42 +336,44 @@ fake_req(MaxHdrBytes, ReqBytes) ->
     try
         ok = gen_tcp:send(S, ReqBytes),
         inet:setopts(S, [{packet, http}]),
-        gen_tcp:recv(S, 0)
+        {gen_tcp:recv(S, 0),
+         receive {link_header, L} -> L after 0 -> undefined end}
     after
         gen_tcp:close(S)
     end.
 
 loop_test_() ->
+    Recbuf = 8192,
     [{"long request line (max = 256KiB)",
       ?_assertEqual(
-         {ok, {http_response, {1,1}, 200, "OK"}},
+         {{ok, {http_response, {1,1}, 200, "OK"}}, undefined},
          fake_req(
-           "GET /" ++ string:chars($X, 8192) ++ " HTTP/1.1\r\n"
+           "GET /" ++ string:chars($X, Recbuf) ++ " HTTP/1.1\r\n"
            ++ "Host: localhost\r\n\r\n"))},
      {"long header line (max = 256KiB)",
       ?_assertEqual(
-         {ok, {http_response, {1,1}, 200, "OK"}},
+         {{ok, {http_response, {1,1}, 200, "OK"}}, "/" ++ string:chars($X, Recbuf)},
          fake_req(
            "GET / HTTP/1.1\r\n"
            ++ "Host: localhost\r\n"
-           ++ "Link: /" ++ string:chars($X, 8192) ++ "\r\n\r\n"))},
+           ++ "Link: /" ++ string:chars($X, Recbuf) ++ "\r\n\r\n"))},
      {"incomplete req too long (max = 100B)",
       ?_assertEqual(
-         {ok, {http_response, {1,1}, 400, "Bad Request"}},
+         {{ok, {http_response, {1,1}, 400, "Bad Request"}}, undefined},
          fake_req(
            100,
-           "GET /" ++ string:chars($X, 8192) ++ " HTTP/1.1"))},
+           "GET /" ++ string:chars($X, Recbuf) ++ " HTTP/1.1"))},
      {"incomplete req + header too long (max = 100B)",
       ?_assertEqual(
-         {ok, {http_response, {1,1}, 400, "Bad Request"}},
+         {{ok, {http_response, {1,1}, 400, "Bad Request"}}, undefined},
          fake_req(
            100,
            "GET / HTTP/1.1\r\n"
            ++ "Host: localhost\r\n"
-           ++ "Link: /" ++ string:chars($X, 8192)))},
+           ++ "Link: /" ++ string:chars($X, Recbuf)))},
      {"complete req + header too long (max = 100B)",
       ?_assertEqual(
-         {ok, {http_response, {1,1}, 400, "Bad Request"}},
+         {{ok, {http_response, {1,1}, 400, "Bad Request"}}, undefined},
          fake_req(
            100,
            "GET /" ++ string:chars($X, 80) ++ " HTTP/1.1\r\n"
