@@ -356,6 +356,22 @@ loop_test_() ->
            "GET / HTTP/1.1\r\n"
            ++ "Host: localhost\r\n"
            ++ "Link: /" ++ string:chars($X, Recbuf) ++ "\r\n\r\n"))},
+     {"998 headers of arabia (max = 256KiB)",
+      ?_assertEqual(
+         {{ok, {http_response, {1,1}, 200, "OK"}}, undefined},
+         fake_req(
+           "GET / HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n"
+           ++ string:copies("Arabia: night\r\n", 998)
+           ++ "\r\n"))},
+     {"1001 headers of arabia (max = 256KiB)",
+      ?_assertEqual(
+         {{ok, {http_response, {1,1}, 400, "Bad Request"}}, undefined},
+         fake_req(
+           "GET / HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n"
+           ++ string:copies("Arabia: night\r\n", 1001)
+           ++ "\r\n"))},
      {"incomplete req too long (max = 100B)",
       ?_assertEqual(
          {{ok, {http_response, {1,1}, 400, "Bad Request"}}, undefined},
