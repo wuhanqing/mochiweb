@@ -64,14 +64,15 @@ loop(Socket, Body, MaxHdrBytes) ->
 request(Socket, Body, MaxHdrBytes, Prev) ->
     ok = mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
-        {Protocol, _, Bin} when
-              (Protocol =:= tcp orelse Protocol =:= ssl)
-              andalso (byte_size(Bin) + byte_size(Prev) < MaxHdrBytes) ->
+        {Protocol, _, Bin}
+          when (Protocol =:= tcp orelse Protocol =:= ssl)
+               andalso (byte_size(Bin) + byte_size(Prev) < MaxHdrBytes) ->
             FullBin = <<Prev/binary, Bin/binary>>,
             case erlang:decode_packet(http, FullBin, []) of
                 {ok, {http_request, Method, Path, Version}, <<>>} ->
                     collect_headers(Socket, {Method, Path, Version}, Body,
-                                    <<>>, false, 0, byte_size(FullBin), MaxHdrBytes);
+                                    MaxHdrBytes, ?MAX_HEADERS,
+                                    byte_size(FullBin), 0, false, <<>>);
                 {error, {http_error, "\r\n"}} ->
                     request(Socket, Body, MaxHdrBytes, <<>>);
                 {error, {http_error, "\n"}} ->
@@ -97,48 +98,36 @@ reentry(Body) ->
             ?MODULE:after_response(Body, Req)
     end.
 
-collect_headers(Socket, Request, _Body, _Collected, _Trunc,
-                ?MAX_HEADERS, _HdrBytes, _MaxHdrBytes) ->
+collect_headers(Socket, Request, _Body, _MaxHdrBytes, MaxHdrCount,
+                _HdrBytes, HdrCount, _Trunc, _Collected) when HdrCount >= MaxHdrCount ->
     %% Too many headers sent, bad request.
     handle_invalid_request(Socket, Request, []);
-collect_headers(Socket, Request, _Body, _Collected, _Trunc,
-                _HeaderCount, HdrBytes, MaxHdrBytes)
-  when HdrBytes >= MaxHdrBytes ->
-    %% Too many headers sent, bad request.
-    handle_invalid_request(Socket, Request, []);
-collect_headers(Socket, Request, Body, Collected, Trunc,
-                HeaderCount, HdrBytes, MaxHdrBytes) ->
+collect_headers(Socket, Request, Body, MaxHdrBytes, MaxHdrCount,
+                HdrBytes, HdrCount, Trunc, Collected) ->
     ok = mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
-        {Protocol, _, More} when Protocol =:= tcp orelse Protocol =:= ssl ->
-            NewHdrBytes = HdrBytes + byte_size(More),
-            if
-                NewHdrBytes >= MaxHdrBytes ->
-                    handle_invalid_request(Socket, Request, []);
-                true ->
-                    case {Trunc, More} of
-                        {false, <<"\n">>} ->
-                            ok = mochiweb_socket:setopts(Socket, [{packet,raw}]),
-                            parse_headers(Socket, Request, Body,
-                                          <<Collected/binary, "\r\n">>, []);
-                        {false, <<"\r\n">>} ->
-                            ok = mochiweb_socket:setopts(Socket, [{packet,raw}]),
-                            parse_headers(Socket, Request, Body,
-                                          <<Collected/binary, "\r\n">>, []);
-                        {_, More} ->
-                            NewBin = <<Collected/binary, More/binary>>,
-                            AllButOne = byte_size(More) - 1,
-                            {Truncated, NewHdrCount} =
-                                case More of
-                                    <<_:AllButOne/binary, "\n">> ->
-                                        {false, 1 + HeaderCount};
-                                    _ ->
-                                        {true, HeaderCount}
-                                end,
-                            collect_headers(Socket, Request, Body, NewBin,
-                                            Truncated, NewHdrCount,
-                                            NewHdrBytes, MaxHdrBytes)
-                    end
+        {Protocol, _, More}
+          when (Protocol =:= tcp orelse Protocol =:= ssl)
+               andalso byte_size(More) + HdrBytes < MaxHdrBytes ->
+            case Trunc of
+                false when More =:= <<"\n">> orelse More =:= <<"\r\n">> ->
+                    ok = mochiweb_socket:setopts(Socket, [{packet, raw}]),
+                    parse_headers(Socket, Request, Body,
+                                  <<Collected/binary, "\r\n">>, []);
+                _ ->
+                    LastByteIndex = byte_size(More) - 1,
+                    NewHdrCount = case More of
+                                      <<_:LastByteIndex/binary, $\n>> ->
+                                          1 + HdrCount;
+                                      _ ->
+                                          HdrCount
+                                  end,
+                    collect_headers(
+                      Socket, Request, Body, MaxHdrBytes, MaxHdrCount,
+                      byte_size(More) + HdrBytes,
+                      NewHdrCount,
+                      false,
+                      <<Collected/binary, More/binary>>)
             end;
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
