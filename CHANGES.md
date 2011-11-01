@@ -1,3 +1,10 @@
+Version 2.4.0 released XXXX-XX-XX
+
+* Handle HTTP request lines and headers longer than the socket receive
+  buffer. Added a new max_header_bytes option to mochiweb_http to
+  configure how many bytes to allow in the request + header, default of
+  256 KiB. (#65)
+
 Version 2.3.0 released 2011-10-14
 
 * Handle ssl_closed message in mochiweb_http (#59)
