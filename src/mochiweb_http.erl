@@ -59,9 +59,9 @@ loop(Socket, Body) ->
 
 loop(Socket, Body, MaxHdrBytes) ->
     ok = mochiweb_socket:setopts(Socket, [{packet, line}]),
-    request(Socket, Body, <<>>, 0, MaxHdrBytes).
+    request(Socket, Body, MaxHdrBytes, <<>>).
 
-request(Socket, Body, Prev, HdrBytes, MaxHdrBytes) ->
+request(Socket, Body, MaxHdrBytes, Prev) ->
     ok = mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
         {Protocol, _, Bin} when
@@ -70,15 +70,14 @@ request(Socket, Body, Prev, HdrBytes, MaxHdrBytes) ->
             FullBin = <<Prev/binary, Bin/binary>>,
             case erlang:decode_packet(http, FullBin, []) of
                 {ok, {http_request, Method, Path, Version}, <<>>} ->
-                    NewHdrBytes = byte_size(FullBin) + HdrBytes,
                     collect_headers(Socket, {Method, Path, Version}, Body,
-                                    <<>>, false, 0, NewHdrBytes, MaxHdrBytes);
+                                    <<>>, false, 0, byte_size(FullBin), MaxHdrBytes);
                 {error, {http_error, "\r\n"}} ->
-                    request(Socket, Body, <<>>, 0, MaxHdrBytes);
+                    request(Socket, Body, MaxHdrBytes, <<>>);
                 {error, {http_error, "\n"}} ->
-                    request(Socket, Body, <<>>, 0, MaxHdrBytes);
+                    request(Socket, Body, MaxHdrBytes, <<>>);
                 {more, _} ->
-                    request(Socket, Body, FullBin, byte_size(FullBin), MaxHdrBytes)
+                    request(Socket, Body, MaxHdrBytes, FullBin)
             end;
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
