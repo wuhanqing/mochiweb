@@ -142,20 +142,17 @@ collect_headers(Socket, Request, Body, MaxHdrBytes, MaxHdrCount,
             exit(normal)
     end.
 
-parse_headers(Socket, Request, Body, <<"\r\n">>, Headers) ->
-    Req = new_request(Socket, Request, lists:reverse(Headers)),
-    call_body(Body, Req),
-    ?MODULE:after_response(Body, Req);
 parse_headers(Socket, Request, Body, Bin, Headers) ->
     case erlang:decode_packet(httph, Bin, []) of
         {ok, {http_header, _, Name, _, Value}, More} ->
             parse_headers(Socket, Request, Body, More,
                           [{Name, Value} | Headers]);
-        {more, _} ->
-            handle_invalid_request(Socket, Request, Headers);
-        {error, _Reason} ->
-            mochiweb_socket:close(Socket),
-            exit(normal)
+        {ok, http_eoh, <<>>} ->
+            Req = new_request(Socket, Request, lists:reverse(Headers)),
+            call_body(Body, Req),
+            ?MODULE:after_response(Body, Req);
+        _ ->
+            handle_invalid_request(Socket, Request, Headers)
     end.
 
 call_body({M, F, A}, Req) ->
