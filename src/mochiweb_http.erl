@@ -84,7 +84,9 @@ request(Socket, Body, MaxHdrBytes, Prev) ->
                 {ok, {http_error, "\n"}, <<>>} ->
                     request(Socket, Body, MaxHdrBytes, <<>>);
                 {more, _} ->
-                    request(Socket, Body, MaxHdrBytes, FullBin)
+                    request(Socket, Body, MaxHdrBytes, FullBin);
+                _ ->
+                    handle_invalid_request(Socket)
             end;
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
