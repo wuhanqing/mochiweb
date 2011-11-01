@@ -6,7 +6,7 @@
 -module(mochiweb_http).
 -author('bob@mochimedia.com').
 -export([start/1, start_link/1, stop/0, stop/1]).
--export([loop/2]).
+-export([loop/2, loop/3]).
 -export([after_response/2, reentry/1]).
 -export([parse_range_request/1, range_skip_length/2]).
 
@@ -14,14 +14,22 @@
 -define(HEADERS_RECV_TIMEOUT, 30000).    %% timeout waiting for headers
 
 -define(MAX_HEADERS, 1000).
+-define(MAX_HEADER_BYTES, 256*1024).
 -define(DEFAULTS, [{name, ?MODULE},
                    {port, 8888}]).
 
 parse_options(Options) ->
     {loop, HttpLoop} = proplists:lookup(loop, Options),
-    Loop = {?MODULE, loop, [HttpLoop]},
+    LoopArgs = case proplists:lookup(max_header_bytes, Options) of
+                   none ->
+                       [HttpLoop];
+                   {max_header_bytes, MaxHdrBytes} ->
+                       [HttpLoop, MaxHdrBytes]
+               end,
+    Loop = {?MODULE, loop, LoopArgs},
     Options1 = [{loop, Loop} | proplists:delete(loop, Options)],
-    mochilists:set_defaults(?DEFAULTS, Options1).
+    Options2 = proplists:delete(max_header_bytes, Options1),
+    mochilists:set_defaults(?DEFAULTS, Options2).
 
 stop() ->
     mochiweb_socket_server:stop(?MODULE).
@@ -47,19 +55,37 @@ start_link(Options) ->
     mochiweb_socket_server:start_link(parse_options(Options)).
 
 loop(Socket, Body) ->
-    ok = mochiweb_socket:setopts(Socket, [{packet, http}]),
-    request(Socket, Body).
+    loop(Socket, Body, ?MAX_HEADER_BYTES).
 
-request(Socket, Body) ->
+loop(Socket, Body, MaxHdrBytes) ->
+    %% NOTE: https://github.com/mochi/mochiweb/pull/65
+    %%
+    %%   You may be wondering why we are using {packet, line} instead of
+    %%   {packet, http}. This is because we want to be able to handle
+    %%   request or header lines that are larger than the receive buffer.
+    %%
+    ok = mochiweb_socket:setopts(Socket, [{packet, line}]),
+    request(Socket, Body, MaxHdrBytes, <<>>).
+
+request(Socket, Body, MaxHdrBytes, Prev) ->
     ok = mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
-        {Protocol, _, {http_request, Method, Path, Version}} when Protocol == http orelse Protocol == ssl ->
-            ok = mochiweb_socket:setopts(Socket, [{packet, httph}]),
-            headers(Socket, {Method, Path, Version}, [], Body, 0);
-        {Protocol, _, {http_error, "\r\n"}} when Protocol == http orelse Protocol == ssl ->
-            request(Socket, Body);
-        {Protocol, _, {http_error, "\n"}} when Protocol == http orelse Protocol == ssl ->
-            request(Socket, Body);
+        {Protocol, _, Bin}
+          when (Protocol =:= tcp orelse Protocol =:= ssl)
+               andalso (byte_size(Bin) + byte_size(Prev) < MaxHdrBytes) ->
+            FullBin = <<Prev/binary, Bin/binary>>,
+            case erlang:decode_packet(http, FullBin, []) of
+                {ok, {http_request, Method, Path, Version}, <<>>} ->
+                    collect_headers(Socket, {Method, Path, Version}, Body,
+                                    MaxHdrBytes, ?MAX_HEADERS,
+                                    byte_size(FullBin), 0, false, <<>>);
+                {error, {http_error, "\r\n"}} ->
+                    request(Socket, Body, MaxHdrBytes, <<>>);
+                {error, {http_error, "\n"}} ->
+                    request(Socket, Body, MaxHdrBytes, <<>>);
+                {more, _} ->
+                    request(Socket, Body, MaxHdrBytes, FullBin)
+            end;
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
             exit(normal);
@@ -69,8 +95,8 @@ request(Socket, Body) ->
         _Other ->
             handle_invalid_request(Socket)
     after ?REQUEST_RECV_TIMEOUT ->
-        mochiweb_socket:close(Socket),
-        exit(normal)
+            mochiweb_socket:close(Socket),
+            exit(normal)
     end.
 
 reentry(Body) ->
@@ -78,28 +104,67 @@ reentry(Body) ->
             ?MODULE:after_response(Body, Req)
     end.
 
-headers(Socket, Request, Headers, _Body, ?MAX_HEADERS) ->
+collect_headers(Socket, Request, _Body, _MaxHdrBytes, MaxHdrCount,
+                _HdrBytes, HdrCount, _Trunc, _Collected) when HdrCount >= MaxHdrCount ->
     %% Too many headers sent, bad request.
-    ok = mochiweb_socket:setopts(Socket, [{packet, raw}]),
-    handle_invalid_request(Socket, Request, Headers);
-headers(Socket, Request, Headers, Body, HeaderCount) ->
+    handle_invalid_request(Socket, Request, []);
+collect_headers(Socket, Request, Body, MaxHdrBytes, MaxHdrCount,
+                HdrBytes, HdrCount, Trunc, Collected) ->
+    %% NOTE: https://github.com/mochi/mochiweb/pull/65
+    %%
+    %%   It may look strange that we collect headers into a big binary and then
+    %%   parse them. This is because of the following (in R14B01):
+    %%   {more, undefined} = erlang:decode_packet(httph, <<"X: Y\r\n">>, []).
+    %%
     ok = mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
-        {Protocol, _, http_eoh} when Protocol == http orelse Protocol == ssl ->
-            Req = new_request(Socket, Request, Headers),
-            call_body(Body, Req),
-            ?MODULE:after_response(Body, Req);
-        {Protocol, _, {http_header, _, Name, _, Value}} when Protocol == http orelse Protocol == ssl ->
-            headers(Socket, Request, [{Name, Value} | Headers], Body,
-                    1 + HeaderCount);
+        {Protocol, _, More}
+          when (Protocol =:= tcp orelse Protocol =:= ssl)
+               andalso byte_size(More) + HdrBytes < MaxHdrBytes ->
+            case Trunc of
+                false when More =:= <<"\n">> orelse More =:= <<"\r\n">> ->
+                    ok = mochiweb_socket:setopts(Socket, [{packet, raw}]),
+                    parse_headers(Socket, Request, Body,
+                                  <<Collected/binary, "\r\n">>, []);
+                _ ->
+                    LastByteIndex = byte_size(More) - 1,
+                    NewHdrCount = case More of
+                                      <<_:LastByteIndex/binary, $\n>> ->
+                                          1 + HdrCount;
+                                      _ ->
+                                          HdrCount
+                                  end,
+                    collect_headers(
+                      Socket, Request, Body, MaxHdrBytes, MaxHdrCount,
+                      byte_size(More) + HdrBytes,
+                      NewHdrCount,
+                      false,
+                      <<Collected/binary, More/binary>>)
+            end;
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
             exit(normal);
+        {ssl_closed, _} ->
+            mochiweb_socket:close(Socket),
+            exit(normal);
         _Other ->
-            handle_invalid_request(Socket, Request, Headers)
+            handle_invalid_request(Socket, Request, [])
     after ?HEADERS_RECV_TIMEOUT ->
-        mochiweb_socket:close(Socket),
-        exit(normal)
+            mochiweb_socket:close(Socket),
+            exit(normal)
+    end.
+
+parse_headers(Socket, Request, Body, Bin, Headers) ->
+    case erlang:decode_packet(httph, Bin, []) of
+        {ok, {http_header, _, Name, _, Value}, More} ->
+            parse_headers(Socket, Request, Body, More,
+                          [{Name, Value} | Headers]);
+        {ok, http_eoh, <<>>} ->
+            Req = new_request(Socket, Request, lists:reverse(Headers)),
+            call_body(Body, Req),
+            ?MODULE:after_response(Body, Req);
+        _ ->
+            handle_invalid_request(Socket, Request, Headers)
     end.
 
 call_body({M, F, A}, Req) ->
@@ -245,5 +310,88 @@ range_skip_length_test() ->
     ?assertEqual(invalid_range,
                  range_skip_length({BodySize, none}, BodySize)),
     ok.
+
+fake_req(ReqBytes) ->
+    fake_req(?MAX_HEADER_BYTES, ReqBytes).
+
+fake_req(MaxHdrBytes, ReqBytes) ->
+    {ok, LS} = gen_tcp:listen(0, [binary, {active, false}]),
+    {ok, Port} = inet:port(LS),
+    Self = self(),
+    spawn_link(fun() ->
+                       {ok, S} = gen_tcp:accept(LS),
+                       try
+                           loop(S, fun(Req) ->
+                                           Self ! {link_header, Req:get_header_value("Link")},
+                                           Req:ok({"text/plain", "ok"})
+                                   end,
+                                MaxHdrBytes)
+                       after
+                           gen_tcp:close(S),
+                           gen_tcp:close(LS)
+                       end
+               end),
+    {ok, S} = gen_tcp:connect("127.0.0.1", Port, [binary, {active, false}]),
+    try
+        ok = gen_tcp:send(S, ReqBytes),
+        inet:setopts(S, [{packet, http}]),
+        {gen_tcp:recv(S, 0),
+         receive {link_header, L} -> L after 0 -> undefined end}
+    after
+        gen_tcp:close(S)
+    end.
+
+loop_test_() ->
+    Recbuf = 8192,
+    [{"long request line (max = 256KiB)",
+      ?_assertEqual(
+         {{ok, {http_response, {1,1}, 200, "OK"}}, undefined},
+         fake_req(
+           "GET /" ++ string:chars($X, Recbuf) ++ " HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n\r\n"))},
+     {"long header line (max = 256KiB)",
+      ?_assertEqual(
+         {{ok, {http_response, {1,1}, 200, "OK"}}, "/" ++ string:chars($X, Recbuf)},
+         fake_req(
+           "GET / HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n"
+           ++ "Link: /" ++ string:chars($X, Recbuf) ++ "\r\n\r\n"))},
+     {"998 headers of arabia (max = 256KiB)",
+      ?_assertEqual(
+         {{ok, {http_response, {1,1}, 200, "OK"}}, undefined},
+         fake_req(
+           "GET / HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n"
+           ++ string:copies("Arabia: night\r\n", 998)
+           ++ "\r\n"))},
+     {"1001 headers of arabia (max = 256KiB)",
+      ?_assertEqual(
+         {{ok, {http_response, {1,1}, 400, "Bad Request"}}, undefined},
+         fake_req(
+           "GET / HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n"
+           ++ string:copies("Arabia: night\r\n", 1001)
+           ++ "\r\n"))},
+     {"incomplete req too long (max = 100B)",
+      ?_assertEqual(
+         {{ok, {http_response, {1,1}, 400, "Bad Request"}}, undefined},
+         fake_req(
+           100,
+           "GET /" ++ string:chars($X, Recbuf) ++ " HTTP/1.1"))},
+     {"incomplete req + header too long (max = 100B)",
+      ?_assertEqual(
+         {{ok, {http_response, {1,1}, 400, "Bad Request"}}, undefined},
+         fake_req(
+           100,
+           "GET / HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n"
+           ++ "Link: /" ++ string:chars($X, Recbuf)))},
+     {"complete req + header too long (max = 100B)",
+      ?_assertEqual(
+         {{ok, {http_response, {1,1}, 400, "Bad Request"}}, undefined},
+         fake_req(
+           100,
+           "GET /" ++ string:chars($X, 80) ++ " HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n\r\n"))}].
 
 -endif.
