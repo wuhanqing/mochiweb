@@ -58,6 +58,12 @@ loop(Socket, Body) ->
     loop(Socket, Body, ?MAX_HEADER_BYTES).
 
 loop(Socket, Body, MaxHdrBytes) ->
+    %% NOTE: https://github.com/mochi/mochiweb/pull/65
+    %%
+    %%   You may be wondering why we are using {packet, line} instead of
+    %%   {packet, http}. This is because we want to be able to handle
+    %%   request or header lines that are larger than the receive buffer.
+    %%
     ok = mochiweb_socket:setopts(Socket, [{packet, line}]),
     request(Socket, Body, MaxHdrBytes, <<>>).
 
@@ -104,6 +110,12 @@ collect_headers(Socket, Request, _Body, _MaxHdrBytes, MaxHdrCount,
     handle_invalid_request(Socket, Request, []);
 collect_headers(Socket, Request, Body, MaxHdrBytes, MaxHdrCount,
                 HdrBytes, HdrCount, Trunc, Collected) ->
+    %% NOTE: https://github.com/mochi/mochiweb/pull/65
+    %%
+    %%   It may look strange that we collect headers into a big binary and then
+    %%   parse them. This is because of the following (in R14B01):
+    %%   {more, undefined} = erlang:decode_packet(httph, <<"X: Y\r\n">>, []).
+    %%
     ok = mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
         {Protocol, _, More}
