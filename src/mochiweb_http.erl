@@ -64,7 +64,9 @@ loop(Socket, Body, MaxHdrBytes) ->
 request(Socket, Body, Prev, HdrBytes, MaxHdrBytes) ->
     ok = mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
-        {Protocol, _, Bin} when Protocol =:= tcp orelse Protocol =:= ssl ->
+        {Protocol, _, Bin} when
+              (Protocol =:= tcp orelse Protocol =:= ssl)
+              andalso (byte_size(Bin) + byte_size(Prev) < MaxHdrBytes) ->
             FullBin = <<Prev/binary, Bin/binary>>,
             case erlang:decode_packet(http, FullBin, []) of
                 {ok, {http_request, Method, Path, Version}, <<>>} ->
