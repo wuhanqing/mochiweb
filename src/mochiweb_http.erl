@@ -79,9 +79,9 @@ request(Socket, Body, MaxHdrBytes, Prev) ->
                     collect_headers(Socket, {Method, Path, Version}, Body,
                                     MaxHdrBytes, ?MAX_HEADERS,
                                     byte_size(FullBin), 0, false, <<>>);
-                {error, {http_error, "\r\n"}} ->
+                {ok, {http_error, "\r\n"}, <<>>} ->
                     request(Socket, Body, MaxHdrBytes, <<>>);
-                {error, {http_error, "\n"}} ->
+                {ok, {http_error, "\n"}, <<>>} ->
                     request(Socket, Body, MaxHdrBytes, <<>>);
                 {more, _} ->
                     request(Socket, Body, MaxHdrBytes, FullBin)
@@ -343,7 +343,14 @@ fake_req(MaxHdrBytes, ReqBytes) ->
 
 loop_test_() ->
     Recbuf = 8192,
-    [{"long request line (max = 256KiB)",
+    [{"extra whitespace before request line (max = 256KiB)",
+      ?_assertEqual(
+         {{ok, {http_response, {1,1}, 200, "OK"}}, undefined},
+         fake_req(
+           "\r\n\r\n\n"
+           "GET / HTTP/1.1\r\n"
+           ++ "Host: localhost\r\n\r\n"))},
+     {"long request line (max = 256KiB)",
       ?_assertEqual(
          {{ok, {http_response, {1,1}, 200, "OK"}}, undefined},
          fake_req(
