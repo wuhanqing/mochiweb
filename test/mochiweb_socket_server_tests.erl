@@ -1,6 +1,7 @@
 -module(mochiweb_socket_server_tests).
 
 -ifdef(TEST).
+
 -include_lib("eunit/include/eunit.hrl").
 
 socket_server(Opts, ServerFun) ->
