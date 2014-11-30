@@ -18,44 +18,11 @@
 -define(HEADERS_RECV_TIMEOUT, 30000).    %% timeout waiting for headers
 
 -define(MAX_HEADERS, 1000).
--define(DEFAULTS, [{name, ?MODULE},
-                   {port, 8888}]).
 -ifdef(gen_tcp_r15b_workaround).
 r15b_workaround() -> true.
 -else.
 r15b_workaround() -> false.
 -endif.
-
-parse_options(Options) ->
-    {loop, HttpLoop} = proplists:lookup(loop, Options),
-    Loop = {?MODULE, loop, [HttpLoop]},
-    Options1 = [{loop, Loop} | proplists:delete(loop, Options)],
-    mochilists:set_defaults(?DEFAULTS, Options1).
-
-%% @spec start(Options) -> ServerRet
-%%     Options = [option()]
-%%     Option = {name, atom()} | {ip, string() | tuple()} | {backlog, integer()}
-%%              | {nodelay, boolean()} | {acceptor_pool_size, integer()}
-%%              | {ssl, boolean()} | {profile_fun, undefined | (Props) -> ok}
-%%              | {link, false}
-%% @doc Start a mochiweb server.
-%%      profile_fun is used to profile accept timing.
-%%      After each accept, if defined, profile_fun is called with a proplist of a subset of the mochiweb_socket_server state and timing information.
-%%      The proplist is as follows: [{name, Name}, {port, Port}, {active_sockets, ActiveSockets}, {timing, Timing}].
-%% @end
-start(Name, Port, Callback) ->
-	SocketOpts = [binary,
-                {reuseaddr, true},
-                {packet, 0},
-                %{backlog, Backlog},
-                {recbuf, ?RECBUF_SIZE},
-                {exit_on_close, false},
-                {active, false},
-                {nodelay, true}],
-	esockd:listen(Name, Port, SocketOpts, {?MODULE, start_link, [Callback]}).
-
-stop(Name, Port) ->
-    esockd:close(Name,  Port).
 
 start_link(Sock, Callback) ->
 	Pid = spawn_link(?MODULE, init, [Sock, Callback]),

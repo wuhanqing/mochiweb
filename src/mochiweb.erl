@@ -4,33 +4,47 @@
 %% @doc Start and stop the MochiWeb server.
 
 -module(mochiweb).
+
+-include("mochiweb.hrl").
+
 -author('bob@mochimedia.com').
 
+-export([start_http/3, stop_http/2).
 -export([new_request/1, new_response/1]).
--export([all_loaded/0, all_loaded/1, reload/0]).
 -export([ensure_started/1]).
 
-reload() ->
-    [c:l(Module) || Module <- all_loaded()].
+-define(HTTP_SOCKOPTS, [
+    binary,
+    {reuseaddr, true},
+    {packet, 0},
+    %{backlog, Backlog},
+    {recbuf, ?RECBUF_SIZE},
+    {exit_on_close, false},
+    {active, false},
+    {nodelay, true}
+]).
 
-all_loaded() ->
-    all_loaded(filename:dirname(code:which(?MODULE))).
+-define(DEFAULTS, [{name, ?MODULE},
+                   {port, 8888}]).
 
-all_loaded(Base) when is_atom(Base) ->
-    [];
-all_loaded(Base) ->
-    FullBase = Base ++ "/",
-    F = fun ({_Module, Loaded}, Acc) when is_atom(Loaded) ->
-                Acc;
-            ({Module, Loaded}, Acc) ->
-                case lists:prefix(FullBase, Loaded) of
-                    true ->
-                        [Module | Acc];
-                    false ->
-                        Acc
-                end
-        end,
-    lists:foldl(F, [], code:all_loaded()).
+%% @spec start(Options) -> ServerRet
+%%     Options = [option()]
+%%     Option = {name, atom()} | {ip, string() | tuple()} | {backlog, integer()}
+%%              | {nodelay, boolean()} | {acceptor_pool_size, integer()}
+%%              | {ssl, boolean()} | {profile_fun, undefined | (Props) -> ok}
+%%              | {link, false}
+%% @doc Start a mochiweb server.
+%%      profile_fun is used to profile accept timing.
+%%      After each accept, if defined, profile_fun is called with a proplist of a subset of the mochiweb_socket_server state and timing information.
+%%      The proplist is as follows: [{name, Name}, {port, Port}, {active_sockets, ActiveSockets}, {timing, Timing}].
+%% @end
+
+start_http(Name, Port, Loop) when is_atom(Name), is_integer(Port) ->
+    Callback = {mochiweb_http, start_link, [Loop]},
+    sockd:listen(Name, Port, ?HTTP_SOCKOPTS, Callback).
+
+stop_http(Name, Port) when is_atom(Name), is_integer(Port) ->
+    esockd:close(Name,  Port).
 
 %% See the erlang:decode_packet/3 docs for the full type
 -spec uri(HttpUri :: term()) -> string().

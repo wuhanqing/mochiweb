@@ -1,20 +1,20 @@
-%% @author Mochi Media <dev@mochimedia.com>
-%% @copyright 2010 Mochi Media <dev@mochimedia.com>
-
-%% @doc Web server for demo.
-
 -module(demo_web).
+
 -author("Mochi Media <dev@mochimedia.com>").
+
 -export([start/0, stop/0, loop/2]).
 
 %% External API
 
 start() ->
-    DocRoot = demo_deps:local_path(["priv", "www"]),
-	mochiweb_http:start(?MODULE, 8000, {?MODULE, loop, [DocRoot]}).
+    {file, Here} = code:is_loaded(?MODULE),
+    Dir = filename:dirname(filename:dirname(Here)),
+    io:format("Dir: ~p~n", [Dir]),
+    DocRoot = filename:join([Dir, "priv", "www"]),
+    mochiweb:start(?MODULE, 8000, {?MODULE, loop, [DocRoot]}).
 
 stop() ->
-    mochiweb_http:stop(?MODULE, 8000).
+    mochiweb:stop(?MODULE, 8000).
 
 loop(Req, DocRoot) ->
     "/" ++ Path = Req:get(path),
@@ -45,10 +45,6 @@ loop(Req, DocRoot) ->
                          "request failed, sorry\n"})
     end.
 
-%% Internal API
-
-get_option(Option, Options) ->
-    {proplists:get_value(Option, Options), proplists:delete(Option, Options)}.
 
 %%
 %% Tests
