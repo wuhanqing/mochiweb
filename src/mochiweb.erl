@@ -9,42 +9,42 @@
 
 -author('bob@mochimedia.com').
 
--export([start_http/3, stop_http/2).
--export([new_request/1, new_response/1]).
--export([ensure_started/1]).
+-export([start_http/2, start_http/3, 
+         stop_http/1]).
 
--define(HTTP_SOCKOPTS, [
+-export([new_request/1, new_response/1]).
+
+-define(HTTP_SOCKET_OPTS, [
     binary,
     {reuseaddr, true},
     {packet, 0},
-    %{backlog, Backlog},
+    {backlog, 128},
     {recbuf, ?RECBUF_SIZE},
     {exit_on_close, false},
-    {active, false},
-    {nodelay, true}
+    {nodelay, false}
 ]).
 
--define(DEFAULTS, [{name, ?MODULE},
-                   {port, 8888}]).
-
-%% @spec start(Options) -> ServerRet
-%%     Options = [option()]
-%%     Option = {name, atom()} | {ip, string() | tuple()} | {backlog, integer()}
-%%              | {nodelay, boolean()} | {acceptor_pool_size, integer()}
-%%              | {ssl, boolean()} | {profile_fun, undefined | (Props) -> ok}
-%%              | {link, false}
-%% @doc Start a mochiweb server.
-%%      profile_fun is used to profile accept timing.
-%%      After each accept, if defined, profile_fun is called with a proplist of a subset of the mochiweb_socket_server state and timing information.
-%%      The proplist is as follows: [{name, Name}, {port, Port}, {active_sockets, ActiveSockets}, {timing, Timing}].
-%% @end
-
-start_http(Name, Port, Loop) when is_atom(Name), is_integer(Port) ->
+start_http(Port, Loop) ->
     Callback = {mochiweb_http, start_link, [Loop]},
-    sockd:listen(Name, Port, ?HTTP_SOCKOPTS, Callback).
+    esockd:listen(http, Port, ?HTTP_SOCKET_OPTS, Callback).
 
-stop_http(Name, Port) when is_atom(Name), is_integer(Port) ->
-    esockd:close(Name,  Port).
+%%TODO: fix this later...
+%%
+%% options:
+%%  {max_connections, integer()}
+%%  {ip, string() | tuple()}
+%%  {backlog, integer()} 
+%%  {nodelay, true}
+%%  {acceptor_pool_size, integer()}
+%%  {nodelay, boolean()} 
+%%  {ssl, boolean()}
+
+start_http(Port, Loop, _Options) ->
+    Callback = {mochiweb_http, start_link, [Loop]},
+    esockd:listen(http, Port, ?HTTP_SOCKET_OPTS, Callback).
+
+stop_http(Port) when is_integer(Port) ->
+    esockd:close(http,  Port).
 
 %% See the erlang:decode_packet/3 docs for the full type
 -spec uri(HttpUri :: term()) -> string().
@@ -81,12 +81,3 @@ new_response({Request, Code, Headers}) ->
                           Code,
                           mochiweb_headers:make(Headers)).
 
-%% @spec ensure_started(App::atom()) -> ok
-%% @doc Start the given App if it has not been started already.
-ensure_started(App) ->
-    case application:start(App) of
-        ok ->
-            ok;
-        {error, {already_started, App}} ->
-            ok
-    end.

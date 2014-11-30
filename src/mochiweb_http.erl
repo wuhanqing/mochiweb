@@ -7,9 +7,7 @@
 
 -author('bob@mochimedia.com').
 
--include("internal.hrl").
-
--export([start/3, start_link/2, stop/2]).
+-export([start_link/2]).
 -export([init/2, loop/2]).
 -export([after_response/2, reentry/1]).
 -export([parse_range_request/1, range_skip_length/2]).
@@ -18,19 +16,21 @@
 -define(HEADERS_RECV_TIMEOUT, 30000).    %% timeout waiting for headers
 
 -define(MAX_HEADERS, 1000).
+
 -ifdef(gen_tcp_r15b_workaround).
 r15b_workaround() -> true.
 -else.
 r15b_workaround() -> false.
 -endif.
 
-start_link(Sock, Callback) ->
-	Pid = spawn_link(?MODULE, init, [Sock, Callback]),
+start_link(Socket, Callback) ->
+	Pid = spawn_link(?MODULE, init, [Socket, Callback]),
 	{ok, Pid}.
 
-init(Sock, Callback) ->
-	esockd_client:accepted(Sock),
-	loop(Sock, Callback).
+init(Socket, Callback) ->
+    io:format("http request from ~p~n", [mochiweb_socket:peername(Socket)]),
+	esockd_client:accepted(Socket),
+	loop(Socket, Callback).
 
 loop(Socket, Callback) ->
     ok = mochiweb_socket:setopts(Socket, [{packet, http}]),
@@ -64,19 +64,20 @@ reentry(Callback) ->
             ?MODULE:after_response(Callback, Req)
     end.
 
-headers(Socket, Request, Headers, _Body, ?MAX_HEADERS) ->
+headers(Socket, Request, Headers, _Callback, ?MAX_HEADERS) ->
     %% Too many headers sent, bad request.
     ok = mochiweb_socket:setopts(Socket, [{packet, raw}]),
     handle_invalid_request(Socket, Request, Headers);
-headers(Socket, Request, Headers, Body, HeaderCount) ->
+
+headers(Socket, Request, Headers, Callback, HeaderCount) ->
     ok = mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
         {Protocol, _, http_eoh} when Protocol == http orelse Protocol == ssl ->
             Req = new_request(Socket, Request, Headers),
-            call_body(Body, Req),
-            ?MODULE:after_response(Body, Req);
+            callback(Callback, Req),
+            ?MODULE:after_response(Callback, Req);
         {Protocol, _, {http_header, _, Name, _, Value}} when Protocol == http orelse Protocol == ssl ->
-            headers(Socket, Request, [{Name, Value} | Headers], Body,
+            headers(Socket, Request, [{Name, Value} | Headers], Callback,
                     1 + HeaderCount);
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
@@ -88,12 +89,6 @@ headers(Socket, Request, Headers, Body, HeaderCount) ->
         exit(normal)
     end.
 
-call_body({M, F, A}, Req) ->
-    erlang:apply(M, F, [Req | A]);
-call_body({M, F}, Req) ->
-    M:F(Req);
-call_body(Callback, Req) when is_function(Callback) ->
-    Callback(Req).
 
 -spec handle_invalid_msg_request(term(), term()) -> no_return().
 handle_invalid_msg_request(Msg, Socket) ->
@@ -175,3 +170,9 @@ range_skip_length(Spec, Size) ->
             invalid_range
     end.
 
+callback({M, F, A}, Req) ->
+    erlang:apply(M, F, [Req | A]);
+callback({M, F}, Req) ->
+    M:F(Req);
+callback(Callback, Req) when is_function(Callback) ->
+    Callback(Req).

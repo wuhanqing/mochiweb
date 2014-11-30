@@ -7,7 +7,7 @@
 -author('bob@mochimedia.com').
 
 -include_lib("kernel/include/file.hrl").
--include("internal.hrl").
+-include("mochiweb.hrl").
 
 -define(QUIP, "Any of you quaids got a smint?").
 

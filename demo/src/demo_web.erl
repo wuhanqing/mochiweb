@@ -7,14 +7,10 @@
 %% External API
 
 start() ->
-    {file, Here} = code:is_loaded(?MODULE),
-    Dir = filename:dirname(filename:dirname(Here)),
-    io:format("Dir: ~p~n", [Dir]),
-    DocRoot = filename:join([Dir, "priv", "www"]),
-    mochiweb:start(?MODULE, 8000, {?MODULE, loop, [DocRoot]}).
+    mochiweb:start_http(8080, {?MODULE, loop, [docroot()]}).
 
 stop() ->
-    mochiweb:stop(?MODULE, 8000).
+    mochiweb:stop_http(8080).
 
 loop(Req, DocRoot) ->
     "/" ++ Path = Req:get(path),
@@ -45,17 +41,7 @@ loop(Req, DocRoot) ->
                          "request failed, sorry\n"})
     end.
 
-
-%%
-%% Tests
-%%
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-you_should_write_a_test() ->
-    ?assertEqual(
-       "No, but I will!",
-       "Have you written any tests?"),
-    ok.
-
--endif.
+docroot() ->
+    {file, Here} = code:is_loaded(?MODULE),
+    Dir = filename:dirname(filename:dirname(Here)),
+    filename:join([Dir, "priv", "www"]).
