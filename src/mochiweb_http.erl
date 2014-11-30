@@ -4,9 +4,13 @@
 %% @doc HTTP server.
 
 -module(mochiweb_http).
+
 -author('bob@mochimedia.com').
--export([start/1, start_link/1, stop/0, stop/1]).
--export([loop/2]).
+
+-include("internal.hrl").
+
+-export([start/3, start_link/2, stop/2]).
+-export([init/2, loop/2]).
 -export([after_response/2, reentry/1]).
 -export([parse_range_request/1, range_skip_length/2]).
 
@@ -16,7 +20,6 @@
 -define(MAX_HEADERS, 1000).
 -define(DEFAULTS, [{name, ?MODULE},
                    {port, 8888}]).
-
 -ifdef(gen_tcp_r15b_workaround).
 r15b_workaround() -> true.
 -else.
@@ -29,12 +32,6 @@ parse_options(Options) ->
     Options1 = [{loop, Loop} | proplists:delete(loop, Options)],
     mochilists:set_defaults(?DEFAULTS, Options1).
 
-stop() ->
-    mochiweb_socket_server:stop(?MODULE).
-
-stop(Name) ->
-    mochiweb_socket_server:stop(Name).
-
 %% @spec start(Options) -> ServerRet
 %%     Options = [option()]
 %%     Option = {name, atom()} | {ip, string() | tuple()} | {backlog, integer()}
@@ -46,26 +43,42 @@ stop(Name) ->
 %%      After each accept, if defined, profile_fun is called with a proplist of a subset of the mochiweb_socket_server state and timing information.
 %%      The proplist is as follows: [{name, Name}, {port, Port}, {active_sockets, ActiveSockets}, {timing, Timing}].
 %% @end
-start(Options) ->
-    mochiweb_socket_server:start(parse_options(Options)).
+start(Name, Port, Callback) ->
+	SocketOpts = [binary,
+                {reuseaddr, true},
+                {packet, 0},
+                %{backlog, Backlog},
+                {recbuf, ?RECBUF_SIZE},
+                {exit_on_close, false},
+                {active, false},
+                {nodelay, true}],
+	esockd:listen(Name, Port, SocketOpts, {?MODULE, start_link, [Callback]}).
 
-start_link(Options) ->
-    mochiweb_socket_server:start_link(parse_options(Options)).
+stop(Name, Port) ->
+    esockd:close(Name,  Port).
 
-loop(Socket, Body) ->
+start_link(Sock, Callback) ->
+	Pid = spawn_link(?MODULE, init, [Sock, Callback]),
+	{ok, Pid}.
+
+init(Sock, Callback) ->
+	esockd_client:accepted(Sock),
+	loop(Sock, Callback).
+
+loop(Socket, Callback) ->
     ok = mochiweb_socket:setopts(Socket, [{packet, http}]),
-    request(Socket, Body).
+    request(Socket, Callback).
 
-request(Socket, Body) ->
+request(Socket, Callback) ->
     ok = mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
         {Protocol, _, {http_request, Method, Path, Version}} when Protocol == http orelse Protocol == ssl ->
             ok = mochiweb_socket:setopts(Socket, [{packet, httph}]),
-            headers(Socket, {Method, Path, Version}, [], Body, 0);
+            headers(Socket, {Method, Path, Version}, [], Callback, 0);
         {Protocol, _, {http_error, "\r\n"}} when Protocol == http orelse Protocol == ssl ->
-            request(Socket, Body);
+            request(Socket, Callback);
         {Protocol, _, {http_error, "\n"}} when Protocol == http orelse Protocol == ssl ->
-            request(Socket, Body);
+            request(Socket, Callback);
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
             exit(normal);
@@ -79,9 +92,9 @@ request(Socket, Body) ->
         exit(normal)
     end.
 
-reentry(Body) ->
+reentry(Callback) ->
     fun (Req) ->
-            ?MODULE:after_response(Body, Req)
+            ?MODULE:after_response(Callback, Req)
     end.
 
 headers(Socket, Request, Headers, _Body, ?MAX_HEADERS) ->
@@ -112,8 +125,8 @@ call_body({M, F, A}, Req) ->
     erlang:apply(M, F, [Req | A]);
 call_body({M, F}, Req) ->
     M:F(Req);
-call_body(Body, Req) ->
-    Body(Req).
+call_body(Callback, Req) when is_function(Callback) ->
+    Callback(Req).
 
 -spec handle_invalid_msg_request(term(), term()) -> no_return().
 handle_invalid_msg_request(Msg, Socket) ->
@@ -121,6 +134,7 @@ handle_invalid_msg_request(Msg, Socket) ->
 
 -spec handle_invalid_msg_request(term(), term(), term(), term()) -> no_return().
 handle_invalid_msg_request(Msg, Socket, Request, RevHeaders) ->
+
     case {Msg, r15b_workaround()} of
         {{tcp_error,_,emsgsize}, true} ->
             %% R15B02 returns this then closes the socket, so close and exit
@@ -141,7 +155,7 @@ new_request(Socket, Request, RevHeaders) ->
     ok = mochiweb_socket:setopts(Socket, [{packet, raw}]),
     mochiweb:new_request({Socket, Request, lists:reverse(RevHeaders)}).
 
-after_response(Body, Req) ->
+after_response(Callback, Req) ->
     Socket = Req:get(socket),
     case Req:should_close() of
         true ->
@@ -150,7 +164,7 @@ after_response(Body, Req) ->
         false ->
             Req:cleanup(),
             erlang:garbage_collect(),
-            ?MODULE:loop(Socket, Body)
+            ?MODULE:loop(Socket, Callback)
     end.
 
 parse_range_request("bytes=0-") ->
@@ -194,93 +208,3 @@ range_skip_length(Spec, Size) ->
             invalid_range
     end.
 
-%%
-%% Tests
-%%
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-range_test() ->
-    %% valid, single ranges
-    ?assertEqual([{20, 30}], parse_range_request("bytes=20-30")),
-    ?assertEqual([{20, none}], parse_range_request("bytes=20-")),
-    ?assertEqual([{none, 20}], parse_range_request("bytes=-20")),
-
-    %% trivial single range
-    ?assertEqual(undefined, parse_range_request("bytes=0-")),
-
-    %% invalid, single ranges
-    ?assertEqual(fail, parse_range_request("")),
-    ?assertEqual(fail, parse_range_request("garbage")),
-    ?assertEqual(fail, parse_range_request("bytes=-20-30")),
-
-    %% valid, multiple range
-    ?assertEqual(
-       [{20, 30}, {50, 100}, {110, 200}],
-       parse_range_request("bytes=20-30,50-100,110-200")),
-    ?assertEqual(
-       [{20, none}, {50, 100}, {none, 200}],
-       parse_range_request("bytes=20-,50-100,-200")),
-
-    %% valid, multiple range with whitespace
-    ?assertEqual(
-       [{20, 30}, {50, 100}, {110, 200}],
-       parse_range_request("bytes=20-30, 50-100 , 110-200")),
-
-    %% valid, multiple range with extra commas
-    ?assertEqual(
-       [{20, 30}, {50, 100}, {110, 200}],
-       parse_range_request("bytes=20-30,,50-100,110-200")),
-    ?assertEqual(
-       [{20, 30}, {50, 100}, {110, 200}],
-       parse_range_request("bytes=20-30, ,50-100,,,110-200")),
-
-    %% no ranges
-    ?assertEqual([], parse_range_request("bytes=")),
-    ok.
-
-range_skip_length_test() ->
-    Body = <<"012345678901234567890123456789012345678901234567890123456789">>,
-    BodySize = byte_size(Body), %% 60
-    BodySize = 60,
-
-    %% these values assume BodySize =:= 60
-    ?assertEqual({1,9}, range_skip_length({1,9}, BodySize)), %% 1-9
-    ?assertEqual({10,10}, range_skip_length({10,19}, BodySize)), %% 10-19
-    ?assertEqual({40, 20}, range_skip_length({none, 20}, BodySize)), %% -20
-    ?assertEqual({30, 30}, range_skip_length({30, none}, BodySize)), %% 30-
-
-    %% valid edge cases for range_skip_length
-    ?assertEqual({BodySize, 0}, range_skip_length({none, 0}, BodySize)),
-    ?assertEqual({0, BodySize}, range_skip_length({none, BodySize}, BodySize)),
-    ?assertEqual({0, BodySize}, range_skip_length({0, none}, BodySize)),
-    BodySizeLess1 = BodySize - 1,
-    ?assertEqual({BodySizeLess1, 1},
-                 range_skip_length({BodySize - 1, none}, BodySize)),
-    ?assertEqual({BodySizeLess1, 1},
-                 range_skip_length({BodySize - 1, BodySize+5}, BodySize)),
-    ?assertEqual({BodySizeLess1, 1},
-                 range_skip_length({BodySize - 1, BodySize}, BodySize)),
-
-    %% out of range, return whole thing
-    ?assertEqual({0, BodySize},
-                 range_skip_length({none, BodySize + 1}, BodySize)),
-    ?assertEqual({0, BodySize},
-                 range_skip_length({none, -1}, BodySize)),
-    ?assertEqual({0, BodySize},
-                 range_skip_length({0, BodySize + 1}, BodySize)),
-
-    %% invalid ranges
-    ?assertEqual(invalid_range,
-                 range_skip_length({-1, 30}, BodySize)),
-    ?assertEqual(invalid_range,
-                 range_skip_length({-1, BodySize + 1}, BodySize)),
-    ?assertEqual(invalid_range,
-                 range_skip_length({BodySize, 40}, BodySize)),
-    ?assertEqual(invalid_range,
-                 range_skip_length({-1, none}, BodySize)),
-    ?assertEqual(invalid_range,
-                 range_skip_length({BodySize, none}, BodySize)),
-    ok.
-
--endif.

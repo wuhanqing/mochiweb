@@ -1,5 +1,7 @@
 -module(mochiweb_charref_tests).
 
+-import(mochiweb_charref, [charref/1, entity/1]).
+
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").

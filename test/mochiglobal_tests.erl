@@ -1,5 +1,7 @@
 -module(mochiglobal_tests).
 
+-import(mochiglobal, [delete/1, get/2]).
+
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").

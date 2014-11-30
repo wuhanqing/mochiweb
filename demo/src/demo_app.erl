@@ -14,7 +14,9 @@
 %% @doc application start callback for demo.
 start(_Type, _StartArgs) ->
     demo_deps:ensure(),
-    demo_sup:start_link().
+    {ok, Sup} = demo_sup:start_link(),
+	demo_web:start(),
+	{ok, Sup}.
 
 %% @spec stop(_State) -> ServerRet
 %% @doc application stop callback for demo.

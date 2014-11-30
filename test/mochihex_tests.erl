@@ -1,5 +1,7 @@
 -module(mochihex_tests).
 
+-import(mochihex, [to_hex/1, to_int/1, to_bin/1]).
+
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").

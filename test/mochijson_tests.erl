@@ -1,5 +1,7 @@
 -module(mochijson_tests).
 
+-import(mochijson, [encoder/1, encode/1, decode/1]).
+
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").

@@ -34,10 +34,3 @@ iodevice_size(IoDevice) ->
     {ok, 0} = file:position(IoDevice, bof),
     Size.
 
-
-%%
-%% Tests
-%%
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.

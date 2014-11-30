@@ -277,10 +277,3 @@ parse_hixie(<<255, Rest/binary>>, Buffer) ->
 parse_hixie(<<H, T/binary>>, Buffer) ->
   parse_hixie(T, <<Buffer/binary, H>>).
 
-%%
-%% Tests
-%%
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--compile(export_all).
--endif.

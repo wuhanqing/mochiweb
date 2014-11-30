@@ -1,9 +1,13 @@
 
 -module(mochifmt_tests).
 
+-import(mochifmt, [tokenize/1, bformat/2, bformat/3]).
+
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").
+
+-record(conversion, {length, precision, ctype, align, fill_char, sign}).
 
 tokenize_test() ->
     {mochifmt, [{raw, "ABC"}]} = tokenize("ABC"),

@@ -21,6 +21,7 @@ ensure_started(App) ->
 start() ->
     demo_deps:ensure(),
     ensure_started(crypto),
+    ensure_started(esockd),
     application:start(demo).
 
 

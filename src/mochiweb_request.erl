@@ -865,9 +865,3 @@ accept_header({?MODULE, [_Socket, _Method, _RawPath, _Version, _Headers]}=THIS) 
             Value
     end.
 
-%%
-%% Tests
-%%
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.

@@ -5,23 +5,20 @@
 
 -module(demo_web).
 -author("Mochi Media <dev@mochimedia.com>").
-
--export([start/1, stop/0, loop/2]).
+-export([start/0, stop/0, loop/2]).
 
 %% External API
 
-start(Options) ->
-    {DocRoot, Options1} = get_option(docroot, Options),
-    Loop = fun (Req) ->
-                   ?MODULE:loop(Req, DocRoot)
-           end,
-    mochiweb_http:start([{name, ?MODULE}, {loop, Loop} | Options1]).
+start() ->
+    DocRoot = demo_deps:local_path(["priv", "www"]),
+	mochiweb_http:start(?MODULE, 8000, {?MODULE, loop, [DocRoot]}).
 
 stop() ->
-    mochiweb_http:stop(?MODULE).
+    mochiweb_http:stop(?MODULE, 8000).
 
 loop(Req, DocRoot) ->
     "/" ++ Path = Req:get(path),
+	io:format("PATH: ~p~n", [Path]),
     try
         case Req:get(method) of
             Method when Method =:= 'GET'; Method =:= 'HEAD' ->

@@ -64,9 +64,3 @@ write_chunk(Data, {?MODULE, [Request, _Code, _Headers]}=THIS) ->
     end.
 
 
-%%
-%% Tests
-%%
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
