@@ -25,9 +25,3 @@ get_value(Key, Args, {?MODULE}) ->
 format_field(Arg, Format, {?MODULE}=THIS) ->
     mochifmt:format_field(Arg, Format, THIS).
 
-%%
-%% Tests
-%%
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.

@@ -9,7 +9,7 @@
 
 -include("internal.hrl").
 
--export([start/1, start_link/1, stop/1]).
+-export([start/1, start_link/1, stop/1, upgrade_state/1]).
 -export([init/1, handle_call/3, handle_cast/2, terminate/2, code_change/3,
          handle_info/2]).
 -export([get/2, set/3]).
@@ -342,12 +342,8 @@ handle_info(Info, State) ->
     error_logger:info_report([{'INFO', Info}, {'State', State}]),
     {noreply, State}.
 
-
-
-%%
-%% Tests
-%%
 -ifdef(TEST).
+
 -include_lib("eunit/include/eunit.hrl").
 
 upgrade_state_test() ->
@@ -358,7 +354,7 @@ upgrade_state_test() ->
                 active_sockets,
                 acceptor_pool_size,
                 ssl, ssl_opts, acceptor_pool},
-    State = upgrade_state(OldState),
+    State = mochiweb_socket_server:upgrade_state(OldState),
     CmpState = #mochiweb_socket_server{port=port, loop=loop,
                                        name=name, max=max, ip=ip,
                                        listen=listen, nodelay=nodelay,
@@ -371,3 +367,4 @@ upgrade_state_test() ->
     ?assertEqual(CmpState, State).
 
 -endif.
+
