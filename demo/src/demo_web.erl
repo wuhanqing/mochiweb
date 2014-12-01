@@ -7,12 +7,12 @@
 %% External API
 
 start() ->
-    mochiweb:start_http(8080, {?MODULE, loop, [docroot()]}).
+    mochiweb:start_http(8080, {?MODULE, handle, [docroot()]}).
 
 stop() ->
     mochiweb:stop_http(8080).
 
-loop(Req, DocRoot) ->
+handle(Req, DocRoot) ->
     "/" ++ Path = Req:get(path),
 	io:format("PATH: ~p~n", [Path]),
     try

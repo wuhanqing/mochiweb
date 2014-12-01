@@ -66,11 +66,7 @@ start_link() ->
     %% [1]
     io:format("Listening at http://127.0.0.1:8080/~n"),
     Broadcaster = spawn_link(?MODULE, broadcast_server, [dict:new()]),
-    mochiweb_http:start_link([
-                              {name, client_access},
-                              {loop, {?MODULE, loop, [Broadcaster]}},
-                              {port, 8080}
-                             ]).
+    mochiweb:start_http(8080, {?MODULE, loop, [Broadcaster]}).
 
 ws_loop(Payload, Broadcaster, _ReplyChannel) ->
     %% [6]
