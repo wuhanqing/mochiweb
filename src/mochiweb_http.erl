@@ -28,7 +28,8 @@ start_link(Socket, Callback) ->
 	{ok, Pid}.
 
 init(Socket, Callback) ->
-    io:format("http request from ~p~n", [mochiweb_socket:peername(Socket)]),
+	error_logger:info("~p: http request from ~p~n", [self(), mochiweb_socket:peername(Socket)]),
+    %io:format("", [mochiweb_socket:peername(Socket)]),
 	esockd_client:accepted(Socket),
 	loop(Socket, Callback).
 
