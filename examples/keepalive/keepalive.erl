@@ -18,17 +18,15 @@
 %% response.  if you do that then control flow returns to the proper place,
 %% and keep alives work like they would if you hadn't hibernated.
 
--export([ start/1, loop/1
-        ]).
+-export([start/1, loop/1]).
 
 %% internal export (so hibernate can reach it)
--export([ resume/3
-        ]).
+-export([ resume/3 ]).
 
 -define(LOOP, {?MODULE, loop}).
 
-start(Options = [{port, _Port}]) ->
-    mochiweb_http:start([{name, ?MODULE}, {loop, ?LOOP} | Options]).
+start(Port) ->
+    mochiweb:start_http(Port, ?LOOP).
 
 loop(Req) ->
     Path = Req:get(path),

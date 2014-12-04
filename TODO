@@ -1,5 +1,9 @@
 1. R17 json -> map 
 
-2. esockd
+OK 2. esockd
 
-3. test/
+OK 3. test/
+
+4. router
+
+5. loop, websocket, comet
