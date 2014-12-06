@@ -17,8 +17,8 @@
 -define(SOCKET_OPTS, [
     binary,
     {reuseaddr, true},
-    {packet, 0},
-    {backlog, 128},
+    {packet, raw},
+    {backlog, 1024}, %%128?
     {recbuf, ?RECBUF_SIZE},
     {exit_on_close, false},
     {nodelay, false}
