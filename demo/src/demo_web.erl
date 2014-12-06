@@ -2,12 +2,13 @@
 
 -author("Mochi Media <dev@mochimedia.com>").
 
--export([start/0, stop/0, loop/2]).
+-export([start/0, stop/0, handle/2]).
 
 %% External API
 
 start() ->
-    mochiweb:start_http(8080, {?MODULE, handle, [docroot()]}).
+	Options = [{max_conns, 1024}, {acceptor_pool, 2}],
+    mochiweb:start_http(8080, Options, {?MODULE, handle, [docroot()]}).
 
 stop() ->
     mochiweb:stop_http(8080).

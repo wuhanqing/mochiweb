@@ -14,7 +14,7 @@
 
 -export([new_request/1, new_response/1]).
 
--define(HTTP_SOCKET_OPTS, [
+-define(SOCKET_OPTS, [
     binary,
     {reuseaddr, true},
     {packet, 0},
@@ -26,22 +26,32 @@
 
 start_http(Port, Loop) ->
     Callback = {mochiweb_http, start_link, [Loop]},
-    esockd:listen(http, Port, ?HTTP_SOCKET_OPTS, Callback).
+    esockd:listen(http, Port, ?SOCKET_OPTS, Callback).
 
 %%TODO: fix this later...
 %%
 %% options:
-%%  {max_connections, integer()}
-%%  {ip, string() | tuple()}
-%%  {backlog, integer()} 
-%%  {nodelay, true}
+%%  {max_conns, integer()}
 %%  {acceptor_pool_size, integer()}
-%%  {nodelay, boolean()} 
 %%  {ssl, boolean()}
 
-start_http(Port, Loop, _Options) ->
+start_http(Port, Options, Loop) ->
     Callback = {mochiweb_http, start_link, [Loop]},
-    esockd:listen(http, Port, ?HTTP_SOCKET_OPTS, Callback).
+    esockd:listen(http, Port, ?SOCKET_OPTS ++ filter(Options), Callback).
+
+filter(Options) ->
+	filter(Options, []).
+
+filter([], Acc) ->
+	Acc;
+filter([{max_conns, Max}|Options], Acc) ->
+	filter(Options, [{max_conns, Max}|Acc]);
+filter([{acceptor_pool, Pool}|Options], Acc) ->
+	filter(Options, [{acceptor_pool, Pool}|Acc]);
+filter([H|Options], Acc) ->
+	error_logger:error_msg("Bad Options: ~p~n", [H]),
+	filter(Options, Acc).
+	
 
 stop_http(Port) when is_integer(Port) ->
     esockd:close(http,  Port).
