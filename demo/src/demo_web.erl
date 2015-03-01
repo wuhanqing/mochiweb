@@ -7,7 +7,7 @@
 %% External API
 
 start() ->
-	Options = [{max_conns, 1024}, {acceptor_pool, 2}],
+	Options = [{max_clients, 1024}, {acceptor_pool, 2}],
     mochiweb:start_http(8080, Options, {?MODULE, handle, [docroot()]}).
 
 stop() ->

@@ -26,32 +26,33 @@
 
 start_http(Port, Loop) ->
     Callback = {mochiweb_http, start_link, [Loop]},
-    esockd:listen(http, Port, ?SOCKET_OPTS, Callback).
+    esockd:open(http, Port, ?SOCKET_OPTS, Callback).
 
 %%TODO: fix this later...
 %%
 %% options:
-%%  {max_conns, integer()}
-%%  {acceptor_pool_size, integer()}
+%%  {max_clients, pos_integer()}
+%%  {acceptor_pool_size, pos_integer()}
 %%  {ssl, boolean()}
 
 start_http(Port, Options, Loop) ->
     Callback = {mochiweb_http, start_link, [Loop]},
-    esockd:listen(http, Port, ?SOCKET_OPTS ++ filter(Options), Callback).
+    esockd:open(http, Port, ?SOCKET_OPTS ++ filter(Options), Callback).
 
 filter(Options) ->
 	filter(Options, []).
 
 filter([], Acc) ->
 	Acc;
-filter([{max_conns, Max}|Options], Acc) ->
-	filter(Options, [{max_conns, Max}|Acc]);
+filter([{ssl, SslOpts}|Options], Acc) ->
+	filter(Options, [{ssl, SslOpts}|Acc]);
+filter([{max_clients, Max}|Options], Acc) ->
+	filter(Options, [{max_clients, Max}|Acc]);
 filter([{acceptor_pool, Pool}|Options], Acc) ->
 	filter(Options, [{acceptor_pool, Pool}|Acc]);
 filter([H|Options], Acc) ->
 	error_logger:error_msg("Bad Options: ~p~n", [H]),
 	filter(Options, Acc).
-	
 
 stop_http(Port) when is_integer(Port) ->
     esockd:close(http,  Port).
