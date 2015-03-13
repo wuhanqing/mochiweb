@@ -32,7 +32,7 @@ start_http(Port, Loop) ->
 %%
 %% options:
 %%  {max_clients, pos_integer()}
-%%  {acceptor_pool_size, pos_integer()}
+%%  {acceptors, pos_integer()}
 %%  {ssl, boolean()}
 
 start_http(Port, Options, Loop) ->
@@ -48,8 +48,8 @@ filter([{ssl, SslOpts}|Options], Acc) ->
 	filter(Options, [{ssl, SslOpts}|Acc]);
 filter([{max_clients, Max}|Options], Acc) ->
 	filter(Options, [{max_clients, Max}|Acc]);
-filter([{acceptor_pool, Pool}|Options], Acc) ->
-	filter(Options, [{acceptor_pool, Pool}|Acc]);
+filter([{acceptors, Pool}|Options], Acc) ->
+	filter(Options, [{acceptors, Pool}|Acc]);
 filter([H|Options], Acc) ->
 	error_logger:error_msg("Bad Options: ~p~n", [H]),
 	filter(Options, Acc).
