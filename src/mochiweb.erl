@@ -50,6 +50,10 @@ filter([{max_clients, Max}|Options], Acc) ->
 	filter(Options, [{max_clients, Max}|Acc]);
 filter([{acceptors, Pool}|Options], Acc) ->
 	filter(Options, [{acceptors, Pool}|Acc]);
+filter([{access, Access}|Options], Acc) ->
+	filter(Options, [{access, Access}|Acc]);
+filter([{tune_buffer, Tune}|Options], Acc) ->
+	filter(Options, [{tune_buffer, Tune}|Acc]);
 filter([H|Options], Acc) ->
 	error_logger:error_msg("Bad Options: ~p~n", [H]),
 	filter(Options, Acc).
