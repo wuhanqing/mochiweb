@@ -1,24 +1,19 @@
 
 -module(websocket_demo).
 
--export([start/0, loop/2]).
+-export([start/0, loop/2, stop/0]).
 
 -export([ws_loop/3, broadcast_server/1]).
 
 start() ->
-    [ok =  application:start(App) || App <- 
-        [crypto, esockd, websocket_demo]].
+    ok =  application:start(crypto),
+    ok =  application:start(esockd),
+    Broadcaster = spawn_link(?MODULE, broadcast_server, [dict:new()]),
+    mochiweb:start_http(8080, [{max_clients, 1024}, {acceptors, 2}],
+                        {?MODULE, loop, [Broadcaster]}).
 
-ws_loop(Payload, Broadcaster, _ReplyChannel) ->
-    %% [6]
-
-    %% [7]
-    io:format("Received data: ~p~n", [Payload]),
-    Received = list_to_binary(Payload),
-    Broadcaster ! {broadcast, self(), Received},
-
-    %% [8]
-    Broadcaster.
+stop() ->
+    mochiweb:stop_http(8080).
 
 loop(Req, Broadcaster) ->
     "/" ++ Path = Req:get(path),
@@ -38,6 +33,17 @@ loop(Req, Broadcaster, true) ->
     %% [4]
     %% [5]
     ReentryWs(Broadcaster).
+
+ws_loop(Payload, Broadcaster, _ReplyChannel) ->
+    %% [6]
+
+    %% [7]
+    io:format("Received data: ~p~n", [Payload]),
+    Received = list_to_binary(Payload),
+    Broadcaster ! {broadcast, self(), Received},
+
+    %% [8]
+    Broadcaster.
 
 %% This server keeps track of connected pids
 broadcast_server(Pids) ->
@@ -85,7 +91,9 @@ broadcast_sendall(Pid, Msg, Pids) ->
       dict:new(),
       Pids).
 
-docroot() ->
-    {file, Here} = code:is_loaded(?MODULE),
-    Dir = filename:dirname(filename:dirname(Here)),
-    filename:join([Dir, "priv", "www"]).
+%docroot() ->
+%    {file, Here} = code:is_loaded(?MODULE),
+%    Dir = filename:dirname(filename:dirname(Here)),
+%    filename:join([Dir, "priv", "www"]).
+
+

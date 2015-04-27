@@ -1,9 +1,8 @@
 {application,websocket_demo,
              [{description,[]},
-              {vsn,"1"},
+              {vsn,"1.0"},
               {registered,[]},
               {applications,[kernel,stdlib]},
               {mod,{websocket_demo_app,[]}},
               {env,[]},
-              {modules,[websocket_demo,websocket_demo_app,
-                        websocket_demo_sup]}]}.
+              {modules,[websocket_demo]}]}.
