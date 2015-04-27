@@ -95,7 +95,10 @@ make_handshake(Req) ->
     SecKey  = Req:get_header_value("sec-websocket-key"),
     Sec1Key = Req:get_header_value("Sec-WebSocket-Key1"),
     Sec2Key = Req:get_header_value("Sec-WebSocket-Key2"),
+    SubProto = Req:get_header_value("Sec-Websocket-Protocol"),
     Origin = Req:get_header_value(origin),
+
+    Result =
     if SecKey =/= undefined ->
             hybi_handshake(SecKey);
        Sec1Key =/= undefined andalso Sec2Key =/= undefined ->
@@ -106,6 +109,19 @@ make_handshake(Req) ->
             hixie_handshake(Scheme, Host, Path, Sec1Key, Sec2Key, Body, Origin);
        true ->
           error
+    end,
+
+    %%Subprotol
+    case Result of
+        {Version, Response = {Status, Headers, Data}} ->
+            if 
+                SubProto =:= undefined ->
+                    {Version, Response};
+                true ->
+                    {Version, {Status, Headers ++ [{"Sec-Websocket-Protocol", SubProto}]}, Data}
+            end;
+        error -> 
+            error
     end.
 
 hybi_handshake(SecKey) ->
