@@ -118,7 +118,8 @@ make_handshake(Req) ->
                 SubProto =:= undefined ->
                     {Version, Response};
                 true ->
-                    {Version, {Status, Headers ++ [{"Sec-Websocket-Protocol", SubProto}]}, Data}
+                    Response1 = {Status, Headers ++ [{"Sec-Websocket-Protocol", SubProto}], Data},
+                    {Version, Response1}
             end;
         error -> 
             error
