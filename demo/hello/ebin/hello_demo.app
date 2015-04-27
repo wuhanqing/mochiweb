@@ -1,0 +1,8 @@
+{application,hello_demo,
+             [{description,[]},
+              {vsn,"1"},
+              {registered,[]},
+              {applications,[kernel,stdlib]},
+              {mod,{hello_demo_app,[]}},
+              {env,[]},
+              {modules,[hello_demo]}]}.
