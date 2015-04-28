@@ -68,19 +68,22 @@ call_body({M, F}, Payload, State, ReplyChannel) ->
 call_body(Body, Payload, State, ReplyChannel) ->
     Body(Payload, State, ReplyChannel).
 
-send(Socket, Payload, hybi) ->
-    Prefix = <<1:1, 0:3, 1:4, (payload_length(iolist_size(Payload)))/binary>>,
+send(Socket, {Type, Payload} = _Reply, hybi) ->
+    Prefix = <<1:1, 0:3, (payload_type(Type)):4, (payload_length(iolist_size(Payload)))/binary>>,
     mochiweb_socket:send(Socket, [Prefix, Payload]);
-send(Socket, Payload, hixie) ->
+send(Socket, {_Type, Payload} = _Reply, hixie) ->
     mochiweb_socket:send(Socket, [0, Payload, 255]).
+
+payload_type(text) -> 1;
+payload_type(binary) -> 2.
 
 upgrade_connection(Req, Body) ->
     case make_handshake(Req) of
         {Version, Response} ->
             Req:respond(Response),
             Socket = Req:get(socket),
-            ReplyChannel = fun (Payload) ->
-                ?MODULE:send(Socket, Payload, Version)
+            ReplyChannel = fun (Reply) ->
+                ?MODULE:send(Socket, Reply, Version)
             end,
             Reentry = fun (State) ->
                 ?MODULE:loop(Socket, Body, State, Version, ReplyChannel)
