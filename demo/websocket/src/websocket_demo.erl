@@ -80,7 +80,7 @@ broadcast_sendall(Pid, Msg, Pids) ->
       fun (K, {Reply, MRef}, Acc) ->
               try
                   begin
-                      Reply(M),
+                      Reply({text, M}),
                       dict:store(K, {Reply, MRef}, Acc)
                   end
               catch
