@@ -31,7 +31,8 @@
       return document.getElementById(id);
     }
     function go() {
-        ws = new WebSocket("ws://" + location.host + "/");
+        var scheme = location.protocol == "https:" ? "wss" : "ws";
+        ws = new WebSocket(scheme + "://" + location.host + "/");
         ws.onopen = function () {
           $('connstate').innerHTML = 'CONNECTED';
         }
