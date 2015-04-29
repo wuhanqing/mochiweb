@@ -6,44 +6,30 @@
 -export([handle/2]).
 
 start() ->
-    ok = ensure_started(crypto),
-    ok = ensure_started(esockd),
+    ok = application:start(crypto),
+    ok = application:start(esockd),
     mochiweb:start_http(8080, [{max_clients, 1024}, {acceptors, 2}],
                         {?MODULE, handle, [docroot()]}).
-
-ensure_started(App) ->
-    case application:start(App) of
-        ok ->
-            ok;
-        {error, {already_started, App}} ->
-            ok
-    end.
 
 stop() ->
     mochiweb:stop_http(8080).
 
 handle(Req, DocRoot) ->
-    "/" ++ Path = Req:get(path),
-	io:format("PATH: ~p~n", [Path]),
+    io:format("~s ~s~n", [Req:method(), Req:get(path)]),
     try
         case Req:get(method) of
-            Method when Method =:= 'GET'; Method =:= 'HEAD' ->
-                case Path of
-                    _ ->
-                        Req:serve_file(Path, DocRoot)
-                end;
+            'GET' ->
+                "/" ++ Path = Req:get(path),
+                Req:serve_file(Path, DocRoot);
             'POST' ->
-                case Path of
-                    _ ->
-                        Req:not_found()
-                end;
+                Req:not_found();
             _ ->
                 Req:respond({501, [], []})
         end
     catch
         Type:What ->
             Report = ["web request failed",
-                      {path, Path},
+                      {path, Req:get(path)},
                       {type, Type}, {what, What},
                       {trace, erlang:get_stacktrace()}],
             error_logger:error_report(Report),
@@ -55,3 +41,4 @@ docroot() ->
     {file, Here} = code:is_loaded(?MODULE),
     Dir = filename:dirname(filename:dirname(Here)),
     filename:join([Dir, "priv", "www"]).
+

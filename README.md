@@ -1,16 +1,14 @@
+
 ## Overview
 
-MochiWeb is an Erlang library for building lightweight HTTP servers.
+MochiWeb is an erlang library for building lightweight HTTP servers.
 
 Fork from http://github.com/mochi/mochiweb
 
 
 ## Changes
 
-Integrate with eSockd socket server
+Integrate with eSockd(Non-blocking TCP/SSL Server)
 
 Improve WebSocket Support
-
-Erlang/OTP R17+ required
-
 
