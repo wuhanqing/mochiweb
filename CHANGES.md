@@ -1,3 +1,12 @@
+
+Version 3.1.0-beta from emqtt team
+----------------------------------
+
+WebSocket(SSL) support
+
+WebSocket text, binary type support
+
+
 Version 2.9.2 released 2014-10-16
 
 * Add timeouts to SSL connect to prevent DoS by opening a connection
