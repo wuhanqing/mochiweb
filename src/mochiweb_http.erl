@@ -27,8 +27,7 @@ start_link(SockArgs, Callback) ->
 	Pid = spawn_link(?MODULE, init, [SockArgs, Callback]),
 	{ok, Pid}.
 
-init(SockArgs = {Transport, Socket, SockFun}, Callback) ->
-    error_logger:info_msg("http request from ~p~n", [Transport:peername(Socket)]),
+init(SockArgs = {Transport, _Socket, _SockFun}, Callback) ->
 	{ok, NewSock} = esockd_connection:accept(SockArgs),
 	loop(Transport, NewSock, Callback).
 
@@ -115,7 +114,7 @@ handle_invalid_request(Transport, Socket, Request, RevHeaders) ->
 
 new_request(Transport, Socket, Request, RevHeaders) ->
     ok = Transport:setopts(Socket, [{packet, raw}]),
-    mochiweb:new_request({Socket, Request, lists:reverse(RevHeaders)}).
+    mochiweb:new_request({Transport, Socket, Request, lists:reverse(RevHeaders)}).
 
 after_response(Transport, Callback, Req) ->
     Socket = Req:get(socket),

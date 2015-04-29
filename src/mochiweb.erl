@@ -82,8 +82,9 @@ uri(HttpString) when is_list(HttpString) ->
 
 %% @spec new_request({Socket, Request, Headers}) -> MochiWebRequest
 %% @doc Return a mochiweb_request data structure.
-new_request({Socket, {Method, HttpUri, Version}, Headers}) ->
-    mochiweb_request:new(Socket,
+new_request({Transport, Socket, {Method, HttpUri, Version}, Headers}) ->
+    mochiweb_request:new(Transport,
+                         Socket,
                          Method,
                          uri(HttpUri),
                          Version,
