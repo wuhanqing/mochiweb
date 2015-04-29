@@ -1,18 +1,30 @@
 
 -module(websocket_demo).
 
--export([start/0, loop/2, stop/0]).
+-export([start/1, loop/2, stop/1]).
 
 -export([ws_loop/3, broadcast_server/1]).
 
-start() ->
+start([ssl]) ->
+    [ok = application:start(App) || App <- [asn1, crypto, public_key, ssl, esockd]],
+    Options = [{max_clients, 1024},
+               {acceptors, 2},
+               {ssl, [{certfile, "etc/server_cert.pem"},
+                      {keyfile,  "etc/server_key.pem"}]}],
+    Broadcaster = spawn_link(?MODULE, broadcast_server, [dict:new()]),
+    mochiweb:start_http(8443, Options, {?MODULE, loop, [Broadcaster]});
+
+start(_) ->
     ok =  application:start(crypto),
     ok =  application:start(esockd),
     Broadcaster = spawn_link(?MODULE, broadcast_server, [dict:new()]),
     mochiweb:start_http(8080, [{max_clients, 1024}, {acceptors, 2}],
                         {?MODULE, loop, [Broadcaster]}).
 
-stop() ->
+stop(ssl) ->
+    mochiweb:stop_http(8443);
+
+stop(_) ->
     mochiweb:stop_http(8080).
 
 loop(Req, Broadcaster) ->
