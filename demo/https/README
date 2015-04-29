@@ -1,0 +1,16 @@
+
+## Build
+
+```
+../../rebar compile
+```
+
+## Run
+
+```
+./run
+```
+
+## Wget
+
+wget --no-check-certificate https://localhost:8443/
