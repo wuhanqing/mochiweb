@@ -6,15 +6,17 @@
 -export([loop/1]).
 
 start() ->
-    ok = application:start(crypto),
-    ok = application:start(esockd),
-    mochiweb:start_http(8080, [{max_clients, 1024}, {acceptors, 2}], 
-                        {?MODULE, loop, []}).
+    [ok = application:start(App) || App <- [asn1, crypto, public_key, ssl, esockd]],
+    Options = [{max_clients, 1024},
+               {acceptors, 2},
+               {ssl, [{certfile, "etc/server_cert.pem"},
+                      {keyfile,  "etc/server_key.pem"}]}],
+    mochiweb:start_http(8443, Options, {?MODULE, loop, []}).
 
 stop() ->
     mochiweb:stop_http(8080).
 
 loop(Req) ->
-    Req:ok("text/plain", "ok... it works!").
+    Req:ok({"text/plain", "ok... it works!"}).
 
 
