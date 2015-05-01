@@ -18,14 +18,19 @@
 %% response.  if you do that then control flow returns to the proper place,
 %% and keep alives work like they would if you hadn't hibernated.
 
--export([start/1, loop/1]).
+-export([start/0, loop/1]).
 
 %% internal export (so hibernate can reach it)
 -export([ resume/3 ]).
 
 -define(LOOP, {?MODULE, loop}).
 
+start() ->
+    start(8080).
+
 start(Port) ->
+    ok = application:start(crypto),
+    ok = application:start(esockd),
     mochiweb:start_http(Port, ?LOOP).
 
 loop(Req) ->
@@ -50,10 +55,10 @@ loop(Req) ->
             %% we'll never reach this point, and this function @loop/1@
             %% won't ever return control to @mochiweb_http@.  luckily
             %% @resume/3@ will take care of that.
-            io:format("not gonna happen~n", []);
+            io:format("~p: not gonna happen~n", [self()]);
 
         _ ->
-            ok(Req, io_lib:format("some other page: ~p", [Path]))
+            ok(Req, io_lib:format("~p some other page: ~p", [self(), Path]))
     end,
 
     io:format("restarting loop normally in ~p~n", [Path]),

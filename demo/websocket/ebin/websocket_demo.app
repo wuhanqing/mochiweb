@@ -5,4 +5,5 @@
               {applications,[kernel,stdlib]},
               {mod,{websocket_demo_app,[]}},
               {env,[]},
-              {modules,[websocket_demo]}]}.
+              {modules,[websocket_demo,websocket_demo_app,
+                        websocket_demo_sup]}]}.

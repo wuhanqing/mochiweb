@@ -15,7 +15,7 @@ stop() ->
     mochiweb:stop_http(8080).
 
 handle(Req, DocRoot) ->
-    io:format("~s ~s~n", [Req:method(), Req:get(path)]),
+    io:format("~s ~s~n", [Req:get(method), Req:get(path)]),
     try
         case Req:get(method) of
             'GET' ->
