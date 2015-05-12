@@ -13,14 +13,14 @@ get_put_delete_test() ->
        bar,
        get(K, bar)),
     try
-        ?MODULE:put(K, baz),
+        mochiglobal:put(K, baz),
         ?assertEqual(
            baz,
            get(K, bar)),
-        ?MODULE:put(K, wibble),
+        mochiglobal:put(K, wibble),
         ?assertEqual(
            wibble,
-           ?MODULE:get(K))
+           mochiglobal:get(K))
     after
         delete(K)
     end,
@@ -29,7 +29,7 @@ get_put_delete_test() ->
        get(K, bar)),
     ?assertEqual(
        undefined,
-       ?MODULE:get(K)),
+       mochiglobal:get(K)),
     ok.
 
 -endif.
