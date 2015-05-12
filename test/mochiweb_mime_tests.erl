@@ -7,7 +7,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 exhaustive_from_extension_test() ->
-    T = mochiweb_cover:clause_lookup_table(?MODULE, from_extension),
+    T = mochiweb_cover:clause_lookup_table(mochiweb_mime, from_extension),
     [?assertEqual(V, from_extension(K)) || {K, V} <- T].
 
 from_extension_test() ->
