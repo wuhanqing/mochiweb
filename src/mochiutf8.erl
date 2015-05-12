@@ -8,8 +8,9 @@
 -export([valid_utf8_bytes/1, codepoint_to_bytes/1, codepoints_to_bytes/1]).
 -export([bytes_to_codepoints/1, bytes_foldl/3, codepoint_foldl/3]).
 -export([read_codepoint/1, len/1]).
-
-
+-ifdef(TEST).
+-compile(export_all).
+-endif.
 %% External API
 
 -type unichar_low() :: 0..16#d7ff.

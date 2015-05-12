@@ -26,29 +26,37 @@
 
 start_http(Port, Loop) ->
     Callback = {mochiweb_http, start_link, [Loop]},
-    esockd:open(http, Port, [{sockopts, ?SOCKET_OPTS}], Callback).
+    esockd:open(http, Port, ?SOCKET_OPTS, Callback).
+
+%%TODO: fix this later...
+%%
+%% options:
+%%  {max_clients, pos_integer()}
+%%  {acceptors, pos_integer()}
+%%  {ssl, boolean()}
 
 start_http(Port, Options, Loop) ->
     Callback = {mochiweb_http, start_link, [Loop]},
-    SockOpts = merge_opts(?SOCKET_OPTS,
-                          proplists:get_value(sockopts, Options, [])),
-    esockd:open(http, Port, merge_opts(Options, [{sockopts, SockOpts}]), Callback).
+    esockd:open(http, Port, ?SOCKET_OPTS ++ filter(Options), Callback).
 
-merge_opts(Defaults, Options) ->
-    lists:foldl(
-        fun({Opt, Val}, Acc) ->
-                case lists:keymember(Opt, 1, Acc) of
-                    true ->
-                        lists:keyreplace(Opt, 1, Acc, {Opt, Val});
-                    false ->
-                        [{Opt, Val}|Acc]
-                end;
-            (Opt, Acc) ->
-                case lists:member(Opt, Acc) of
-                    true -> Acc;
-                    false -> [Opt | Acc]
-                end
-        end, Defaults, Options).
+filter(Options) ->
+	filter(Options, []).
+
+filter([], Acc) ->
+	Acc;
+filter([{ssl, SslOpts}|Options], Acc) ->
+	filter(Options, [{ssl, SslOpts}|Acc]);
+filter([{max_clients, Max}|Options], Acc) ->
+	filter(Options, [{max_clients, Max}|Acc]);
+filter([{acceptors, Pool}|Options], Acc) ->
+	filter(Options, [{acceptors, Pool}|Acc]);
+filter([{access, Access}|Options], Acc) ->
+	filter(Options, [{access, Access}|Acc]);
+filter([{tune_buffer, Tune}|Options], Acc) ->
+	filter(Options, [{tune_buffer, Tune}|Acc]);
+filter([H|Options], Acc) ->
+	error_logger:error_msg("Bad Options: ~p~n", [H]),
+	filter(Options, Acc).
 
 stop_http(Port) when is_integer(Port) ->
     esockd:close(http,  Port).

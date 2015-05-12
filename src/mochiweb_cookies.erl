@@ -4,7 +4,7 @@
 %% @doc HTTP Cookie parsing and generating (RFC 2109, RFC 2965).
 
 -module(mochiweb_cookies).
--export([parse_cookie/1, cookie/3, cookie/2]).
+-export([parse_cookie/1, cookie/3, cookie/2,quote/1]).
 
 -define(QUOTE, $\").
 
