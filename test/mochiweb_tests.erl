@@ -11,17 +11,16 @@ ssl_cert_opts() ->
     [{certfile, CertFile}, {keyfile, KeyFile}].
 
 with_server(Transport, ServerFun, ClientFun) ->
-    ServerOpts0 = [{ip, "127.0.0.1"}, {port, 0}, {loop, ServerFun}],
     ServerOpts = case Transport of
         plain ->
-            ServerOpts0;
+		[];
         ssl ->
-            ServerOpts0 ++ [{ssl, true}, {ssl_opts, ssl_cert_opts()}]
+            [{ssl, ssl_cert_opts()}]
     end,
-    {ok, Server} = mochiweb_http:start_link(ServerOpts),
-    Port = mochiweb_socket_server:get(Server, port),
-    Res = (catch ClientFun(Transport, Port)),
-    mochiweb_http:stop(Server),
+    [application:start(App) || App <- [asn1, crypto, public_key, ssl, esockd]],
+     mochiweb:start_http(8080, ServerOpts, ServerFun),
+    Res = (catch ClientFun(Transport, 8080)),
+    mochiweb:stop_http(8080),
     Res.
 
 request_test() ->
