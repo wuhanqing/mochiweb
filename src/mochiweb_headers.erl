@@ -10,7 +10,9 @@
 -export([default/3, enter_from_list/2, default_from_list/2]).
 -export([to_list/1, make/1]).
 -export([from_binary/1]).
-
+-ifdef(TEST).
+-compile(export_all).
+-endif.
 %% @type headers().
 %% @type key() = atom() | binary() | string().
 %% @type value() = atom() | binary() | string() | integer().

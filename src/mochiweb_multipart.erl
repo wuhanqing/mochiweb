@@ -6,7 +6,7 @@
 -module(mochiweb_multipart).
 -author('bob@mochimedia.com').
 
--export([parse_form/1, parse_form/2]).
+-export([parse_form/1, parse_form/2, find_boundary/2, find_in_binary/2, parse_headers/1,flash_multipart_hack/1, multipart_body/4]).
 -export([parse_multipart_request/2]).
 -export([parts_to_body/3, parts_to_multipart_body/4]).
 -export([default_file_handler/2]).

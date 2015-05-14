@@ -27,7 +27,9 @@
 
 -export([loop/6, upgrade_connection/2, request/6]).
 -export([send/4]).
-
+-ifdef(TEST).
+-compile(export_all).
+-endif.
 loop(Transport, Socket, Body, State, WsVersion, ReplyChannel) ->
     ok = Transport:setopts(Socket, [{packet, 0}, {active, once}]),
     proc_lib:hibernate(?MODULE, request,
