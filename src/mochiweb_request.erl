@@ -87,6 +87,9 @@ get(version, {?MODULE, [_Transport, _Socket, _Method, _RawPath, Version, _Header
     Version;
 get(headers, {?MODULE, [_Transport, _Socket, _Method, _RawPath, _Version, Headers]}) ->
     Headers;
+get(peername, {?MODULE, [Transport, Socket, _Method, _RawPath, _Version, _Headers]}) ->
+    Transport:peername(Socket);
+
 get(peer, {?MODULE, [Transport, Socket, _Method, _RawPath, _Version, _Headers]}=THIS) ->
     case Transport:peername(Socket) of
         {ok, {Addr={10, _, _, _}, _Port}} ->
