@@ -1,4 +1,10 @@
 
+Version 3.2.0-beta from emqtt team
+----------------------------------
+
+upgrade eSockd to 2.5.1 and support 'sockopts' option
+
+
 Version 3.1.0-beta from emqtt team
 ----------------------------------
 

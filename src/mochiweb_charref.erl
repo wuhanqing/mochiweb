@@ -3,7 +3,7 @@
 
 %% @doc Converts HTML 5 charrefs and entities to codepoints (or lists of code points).
 -module(mochiweb_charref).
--export([charref/1]).
+-export([charref/1, entity/1]).
 
 %% External API.
 
