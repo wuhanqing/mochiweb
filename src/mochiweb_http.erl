@@ -8,7 +8,7 @@
 -author('bob@mochimedia.com').
 
 -export([start_link/2]).
--export([init/2, loop/3]).
+-export([init/2, loop/2]).
 -export([after_response/3, reentry/2]).
 -export([parse_range_request/1, range_skip_length/2]).
 
@@ -23,109 +23,106 @@ r15b_workaround() -> true.
 r15b_workaround() -> false.
 -endif.
 
-start_link(SockArgs, Callback) ->
-	Pid = spawn_link(?MODULE, init, [SockArgs, Callback]),
-	{ok, Pid}.
+start_link(Conn, Callback) ->
+    {ok, spawn_link(?MODULE, init, [Conn, Callback])}.
 
-init(SockArgs = {Transport, _Socket, _SockFun}, Callback) ->
-	{ok, NewSock} = esockd_connection:accept(SockArgs),
-	loop(Transport, NewSock, Callback).
+init(Conn, Callback) ->
+    {ok, NewConn} = Conn:wait(),
+	loop(NewConn, Callback).
 
-loop(Transport, Socket, Callback) ->
-    ok = Transport:setopts(Socket, [{packet, http}]),
-    request(Transport, Socket, Callback).
+loop(Conn, Callback) ->
+    ok = Conn:setopts([{packet, http}]),
+    request(Conn, Callback).
 
-request(Transport, Socket, Callback) ->
-    ok = Transport:setopts(Socket, [{active, once}]),
+request(Conn, Callback) ->
+    ok = Conn:setopts([{active, once}]),
     receive
         {Protocol, _, {http_request, Method, Path, Version}} when Protocol == http orelse Protocol == ssl ->
-            ok = Transport:setopts(Socket, [{packet, httph}]),
-            headers(Transport, Socket, {Method, Path, Version}, [], Callback, 0);
+            ok = Conn:setopts([{packet, httph}]),
+            headers(Conn, {Method, Path, Version}, [], Callback, 0);
         {Protocol, _, {http_error, "\r\n"}} when Protocol == http orelse Protocol == ssl ->
-            request(Transport, Socket, Callback);
+            request(Conn, Callback);
         {Protocol, _, {http_error, "\n"}} when Protocol == http orelse Protocol == ssl ->
-            request(Transport, Socket, Callback);
+            request(Conn, Callback);
         {tcp_closed, _} ->
-            Transport:close(Socket),
+            Conn:close(),
             exit(normal);
         {ssl_closed, _} ->
-            Transport:close(Socket),
+            Conn:close(),
             exit(normal);
         Other ->
-            handle_invalid_msg_request(Other, Transport, Socket)
+            handle_invalid_msg_request(Other, Conn)
     after ?REQUEST_RECV_TIMEOUT ->
-        Transport:close(Socket),
+        Conn:close(),
         exit(normal)
     end.
 
-reentry(Transport, Callback) ->
+reentry(Conn, Callback) ->
     fun (Req) ->
-            ?MODULE:after_response(Transport, Callback, Req)
+            ?MODULE:after_response(Conn, Callback, Req)
     end.
 
-headers(Transport, Socket, Request, Headers, _Callback, ?MAX_HEADERS) ->
+headers(Conn, Request, Headers, _Callback, ?MAX_HEADERS) ->
     %% Too many headers sent, bad request.
-    ok = Transport:setopts(Socket, [{packet, raw}]),
-    handle_invalid_request(Transport, Socket, Request, Headers);
+    ok = Conn:setopts([{packet, raw}]),
+    handle_invalid_request(Conn, Request, Headers);
 
-headers(Transport, Socket, Request, Headers, Callback, HeaderCount) ->
-    ok = Transport:setopts(Socket, [{active, once}]),
+headers(Conn, Request, Headers, Callback, HeaderCount) ->
+    ok = Conn:setopts([{active, once}]),
     receive
         {Protocol, _, http_eoh} when Protocol == http orelse Protocol == ssl ->
-            Req = new_request(Transport, Socket, Request, Headers),
+            Req = new_request(Conn, Request, Headers),
             callback(Callback, Req),
-            ?MODULE:after_response(Transport, Callback, Req);
+            ?MODULE:after_response(Conn, Callback, Req);
         {Protocol, _, {http_header, _, Name, _, Value}} when Protocol == http orelse Protocol == ssl ->
-            headers(Transport, Socket, Request, [{Name, Value} | Headers], Callback,
-                    1 + HeaderCount);
+            headers(Conn, Request, [{Name, Value} | Headers], Callback, 1 + HeaderCount);
         {tcp_closed, _} ->
-            Transport:close(Socket),
+            Conn:close(),
             exit(normal);
         Other ->
-            handle_invalid_msg_request(Other, Transport, Socket, Request, Headers)
+            handle_invalid_msg_request(Other, Conn, Request, Headers)
     after ?HEADERS_RECV_TIMEOUT ->
-        Transport:close(Socket),
+        Conn:close(),
         exit(normal)
     end.
 
 
--spec handle_invalid_msg_request(term(), term(), term()) -> no_return().
-handle_invalid_msg_request(Msg, Transport, Socket) ->
-    handle_invalid_msg_request(Msg, Transport, Socket, {'GET', {abs_path, "/"}, {0,9}}, []).
+-spec handle_invalid_msg_request(term(), esockd_connection:connection()) -> no_return().
+handle_invalid_msg_request(Msg, Conn) ->
+    handle_invalid_msg_request(Msg, Conn, {'GET', {abs_path, "/"}, {0,9}}, []).
 
--spec handle_invalid_msg_request(term(), term(), term(), term(), term()) -> no_return().
-handle_invalid_msg_request(Msg, Transport, Socket, Request, RevHeaders) ->
+-spec handle_invalid_msg_request(term(), esockd_connection:connection(), term(), term()) -> no_return().
+handle_invalid_msg_request(Msg, Conn, Request, RevHeaders) ->
 
     case {Msg, r15b_workaround()} of
         {{tcp_error,_,emsgsize}, true} ->
             %% R15B02 returns this then closes the socket, so close and exit
-            Transport:close(Socket),
+            Conn:close(),
             exit(normal);
         _ ->
-            handle_invalid_request(Transport, Socket, Request, RevHeaders)
+            handle_invalid_request(Conn, Request, RevHeaders)
     end.
 
--spec handle_invalid_request(term(), term(), term(), term()) -> no_return().
-handle_invalid_request(Transport, Socket, Request, RevHeaders) ->
-    Req = new_request(Transport, Socket, Request, RevHeaders),
+-spec handle_invalid_request(esockd_connection:connection(), term(), term()) -> no_return().
+handle_invalid_request(Conn, Request, RevHeaders) ->
+    Req = new_request(Conn, Request, RevHeaders),
     Req:respond({400, [], []}),
-    Transport:close(Socket),
+    Conn:close(),
     exit(normal).
 
-new_request(Transport, Socket, Request, RevHeaders) ->
-    ok = Transport:setopts(Socket, [{packet, raw}]),
-    mochiweb:new_request({Transport, Socket, Request, lists:reverse(RevHeaders)}).
+new_request(Conn, Request, RevHeaders) ->
+    ok = Conn:setopts([{packet, raw}]),
+    mochiweb:new_request({Conn, Request, lists:reverse(RevHeaders)}).
 
-after_response(Transport, Callback, Req) ->
-    Socket = Req:get(socket),
+after_response(Conn, Callback, Req) ->
     case Req:should_close() of
         true ->
-            Transport:close(Socket),
+            Conn:close(),
             exit(normal);
         false ->
             Req:cleanup(),
             erlang:garbage_collect(),
-            ?MODULE:loop(Transport, Socket, Callback)
+            ?MODULE:loop(Conn, Callback)
     end.
 
 parse_range_request("bytes=0-") ->

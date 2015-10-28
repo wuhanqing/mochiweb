@@ -24,7 +24,8 @@ with_server(Transport, ServerFun, ClientFun) ->
     Res.
 
 request_test() ->
-    R = mochiweb_request:new(esockd_transport, z, z, "/foo/bar/baz%20wibble+quux?qs=2", z, []),
+    Conn = esockd_connection:new(esockd_transport, socket, []),
+    R = mochiweb_request:new(Conn, z, "/foo/bar/baz%20wibble+quux?qs=2", z, []),
     "/foo/bar/baz wibble quux" = R:get(path),
     ok.
 
