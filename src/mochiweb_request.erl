@@ -70,7 +70,7 @@ get_combined_header_value(K, {?MODULE, [_Conn, _Method, _RawPath, _Version, Head
 %%      an ssl socket will be returned as <code>{ssl, SslSocket}</code>.
 %%      You can use <code>SslSocket</code> with the <code>ssl</code>
 %%      application, eg: <code>ssl:peercert(SslSocket)</code>.
-get(conn, {?MODULE, [Conn, _Method, _RawPath, _Version, _Headers]}) ->
+get(connection, {?MODULE, [Conn, _Method, _RawPath, _Version, _Headers]}) ->
     Conn;
 get(transport, {?MODULE, [Conn, _Method, _RawPath, _Version, _Headers]}) ->
     Conn:transport();

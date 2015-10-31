@@ -86,7 +86,7 @@ upgrade_connection(Req, Body) ->
     case make_handshake(Req) of
         {Version, Response} ->
             Req:respond(Response),
-            Conn = Req:get(conn),
+            Conn = Req:get(connection),
             ReplyChannel = fun (Reply) ->
                 ?MODULE:send(Conn, Reply, Version)
             end,
@@ -95,7 +95,7 @@ upgrade_connection(Req, Body) ->
             end,
             {Reentry, ReplyChannel};
         _ ->
-            Conn = Req:get(conn),
+            Conn = Req:get(connection),
             Conn:close(),
             exit(normal)
     end.
