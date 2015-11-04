@@ -1,4 +1,10 @@
 
+Version 4.0-beta from emqtt team
+----------------------------------
+
+Upgrade eSockd to 3.0
+
+
 Version 3.2.0-beta from emqtt team
 ----------------------------------
 
