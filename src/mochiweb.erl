@@ -25,14 +25,14 @@
 ]).
 
 start_http(Port, Loop) ->
-    Callback = {mochiweb_http, start_link, [Loop]},
-    esockd:open(http, Port, [{sockopts, ?SOCKET_OPTS}], Callback).
+    MFA = {mochiweb_http, start_link, [Loop]},
+    esockd:open(http, Port, [{sockopts, ?SOCKET_OPTS}], MFA).
 
 start_http(Port, Options, Loop) ->
-    Callback = {mochiweb_http, start_link, [Loop]},
+    MFA = {mochiweb_http, start_link, [Loop]},
     SockOpts = merge_opts(?SOCKET_OPTS,
                           proplists:get_value(sockopts, Options, [])),
-    esockd:open(http, Port, merge_opts(Options, [{sockopts, SockOpts}]), Callback).
+    esockd:open(http, Port, merge_opts(Options, [{sockopts, SockOpts}]), MFA).
 
 merge_opts(Defaults, Options) ->
     lists:foldl(
@@ -51,7 +51,7 @@ merge_opts(Defaults, Options) ->
         end, Defaults, Options).
 
 stop_http(Port) when is_integer(Port) ->
-    esockd:close(http,  Port).
+    esockd:close(http, Port).
 
 %% See the erlang:decode_packet/3 docs for the full type
 -spec uri(HttpUri :: term()) -> string().
@@ -72,11 +72,10 @@ uri({scheme, Hostname, Port}) ->
 uri(HttpString) when is_list(HttpString) ->
     HttpString.
 
-%% @spec new_request({Socket, Request, Headers}) -> MochiWebRequest
+%% @spec new_request({Conn, Request, Headers}) -> MochiWebRequest
 %% @doc Return a mochiweb_request data structure.
-new_request({Transport, Socket, {Method, HttpUri, Version}, Headers}) ->
-    mochiweb_request:new(Transport,
-                         Socket,
+new_request({Conn, {Method, HttpUri, Version}, Headers}) ->
+    mochiweb_request:new(Conn,
                          Method,
                          uri(HttpUri),
                          Version,
