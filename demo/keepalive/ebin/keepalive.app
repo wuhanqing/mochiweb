@@ -1,7 +1,0 @@
-{application,keepalive,
-             [{description,"keepalive demo"},
-              {vsn,"1"},
-              {modules,[keepalive]},
-              {registered,[]},
-              {applications,[kernel,stdlib]},
-              {env,[]}]}.
