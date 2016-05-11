@@ -11,3 +11,4 @@
 *.beam
 *.dump
 .rebar
+demo/*/ebin/
