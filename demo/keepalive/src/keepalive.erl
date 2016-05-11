@@ -40,7 +40,7 @@ loop(Req) ->
         ["longpoll" | RestOfPath] ->
             %% the "reentry" is a continuation -- what @mochiweb_http@
             %% needs to do to start its loop back at the top
-            Reentry = mochiweb_http:reentry(?LOOP),
+            Reentry = mochiweb_http:reentry(Req:get(connection), ?LOOP),
 
             %% here we could send a message to some other process and hope
             %% to get an interesting message back after a while.  for
