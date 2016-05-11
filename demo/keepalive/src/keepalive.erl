@@ -29,6 +29,7 @@ start() ->
     start(8080).
 
 start(Port) ->
+    ok = application:start(gen_logger),
     ok = application:start(crypto),
     ok = application:start(esockd),
     mochiweb:start_http(Port, ?LOOP).
