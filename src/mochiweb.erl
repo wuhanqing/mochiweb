@@ -9,8 +9,7 @@
 
 -author('bob@mochimedia.com').
 
--export([start_http/2, start_http/3, 
-         stop_http/1]).
+-export([start_http/2, start_http/3, start_http/4, stop_http/1, stop_http/2]).
 
 -export([new_request/1, new_response/1]).
 
@@ -24,16 +23,30 @@
     {nodelay, false}
 ]).
 
-start_http(Port, Loop) ->
-    MFA = {mochiweb_http, start_link, [Loop]},
-    esockd:open(http, Port, [{sockopts, ?SOCKET_OPTS}], MFA).
+%% @doc Start HTTP Listener
+-spec(start_http(esockd:listen_on(), esockd:mfargs()) -> {ok, pid()}).
+start_http(ListenOn, MFArgs) ->
+    start_http(ListenOn, [], MFArgs).
 
-start_http(Port, Options, Loop) ->
-    MFA = {mochiweb_http, start_link, [Loop]},
+-spec(start_http(esockd:listen_on(), [esockd:option()], esockd:mfargs()) -> {ok, pid()}).
+start_http(ListenOn, Options, MFArgs) ->
+    start_http(http, ListenOn, Options, MFArgs).
+
+-spec(start_http(atom(), esockd:listen_on(), [esockd:option()], esockd:mfargs()) -> {ok, pid()}).
+start_http(Proto, ListenOn, Options, MFArgs) when is_atom(Proto) ->
     SockOpts = merge_opts(?SOCKET_OPTS,
                           proplists:get_value(sockopts, Options, [])),
-    esockd:open(http, Port, merge_opts(Options, [{sockopts, SockOpts}]), MFA).
+    esockd:open(Proto, ListenOn, merge_opts(Options, [{sockopts, SockOpts}]),
+                {mochiweb_http, start_link, [MFArgs]}).
 
+%% @doc Stop HTTP Listener
+-spec(stop_http(esockd:listen_on()) -> ok).
+stop_http(ListenOn) -> stop_http(http, ListenOn).
+
+-spec(stop_http(atom(), esockd:listen_on()) -> ok).
+stop_http(Proto, ListenOn) -> esockd:close(Proto, ListenOn).
+
+%% @private
 merge_opts(Defaults, Options) ->
     lists:foldl(
         fun({Opt, Val}, Acc) ->
@@ -49,9 +62,6 @@ merge_opts(Defaults, Options) ->
                     false -> [Opt | Acc]
                 end
         end, Defaults, Options).
-
-stop_http(Port) when is_integer(Port) ->
-    esockd:close(http, Port).
 
 %% See the erlang:decode_packet/3 docs for the full type
 -spec uri(HttpUri :: term()) -> string().
