@@ -7,7 +7,7 @@
 
 start() ->
     ok = application:start(crypto),
-    ok = application:start(esockd),
+    ok = esockd:start(),
     mochiweb:start_http(8080, [{max_clients, 1024}, {acceptors, 2}],
                         {?MODULE, handle, [docroot()]}).
 

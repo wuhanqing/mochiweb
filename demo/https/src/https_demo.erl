@@ -6,7 +6,7 @@
 -export([loop/1]).
 
 start() ->
-    [ok = application:start(App) || App <- [asn1, crypto, public_key, ssl, esockd]],
+    [ok = application:start(App) || App <- [asn1, crypto, public_key, ssl, gen_logger, esockd]],
     Options = [{max_clients, 1024},
                {acceptors, 2},
                {ssl, [{certfile, "etc/server_cert.pem"},

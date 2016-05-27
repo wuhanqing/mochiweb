@@ -32,7 +32,7 @@
 %% [8]: Message handling function must return new state value
 
 start([ssl]) ->
-    [ok = application:start(App) || App <- [asn1, crypto, public_key, ssl, esockd]],
+    [ok = application:start(App) || App <- [asn1, crypto, public_key, ssl, gen_logger, esockd]],
     Options = [{max_clients, 1024},
                {acceptors, 2},
                {ssl, [{certfile, "etc/server_cert.pem"},
@@ -41,8 +41,7 @@ start([ssl]) ->
     mochiweb:start_http(8443, Options, {?MODULE, loop, [Broadcaster]});
 
 start(_) ->
-    ok =  application:start(crypto),
-    ok =  application:start(esockd),
+    ok = application:start(crypto), ok = esockd:start(),
     Broadcaster = spawn_link(?MODULE, broadcast_server, [dict:new()]),
     mochiweb:start_http(8080, [{max_clients, 1024}, {acceptors, 2}],
                         {?MODULE, loop, [Broadcaster]}).

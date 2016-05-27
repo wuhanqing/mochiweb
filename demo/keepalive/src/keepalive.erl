@@ -31,7 +31,7 @@ start() ->
 start(Port) ->
     ok = application:start(gen_logger),
     ok = application:start(crypto),
-    ok = application:start(esockd),
+    ok = esockd:start(),
     mochiweb:start_http(Port, ?LOOP).
 
 loop(Req) ->

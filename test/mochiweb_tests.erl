@@ -17,7 +17,7 @@ with_server(Transport, ServerFun, ClientFun) ->
         ssl ->
             [{ssl, ssl_cert_opts()}]
     end,
-    [application:start(App) || App <- [asn1, crypto, public_key, ssl, esockd]],
+    [application:start(App) || App <- [asn1, crypto, public_key, ssl, gen_logger, esockd]],
      mochiweb:start_http(8080, ServerOpts, ServerFun),
     Res = (catch ClientFun(Transport, 8080)),
     mochiweb:stop_http(8080),
