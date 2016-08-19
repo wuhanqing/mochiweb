@@ -1,4 +1,9 @@
 
+Version 4.1.1 released 2016-08-19
+---------------------------------
+
+WebSocket: Support 64K+ Frames (https://github.com/emqtt/emqttd/issues/643)
+
 Version 4.1 released 2016-05-31
 -------------------------------
 
