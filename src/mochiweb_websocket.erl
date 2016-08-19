@@ -197,6 +197,7 @@ process_frames([{Opcode, Payload} | Rest], Acc) ->
 
 parse_hybi_frames(_, <<>>, Acc) ->
     lists:reverse(Acc);
+
 parse_hybi_frames(Conn, <<_Fin:1,
                           _Rsv:3,
                           Opcode:4,
@@ -208,6 +209,7 @@ parse_hybi_frames(Conn, <<_Fin:1,
                   Acc) when PayloadLen < 126 ->
     Payload2 = hybi_unmask(Payload, MaskKey, <<>>),
     parse_hybi_frames(Conn, Rest, [{Opcode, Payload2} | Acc]);
+
 parse_hybi_frames(Conn, <<_Fin:1,
                           _Rsv:3,
                           Opcode:4,
@@ -219,6 +221,7 @@ parse_hybi_frames(Conn, <<_Fin:1,
                           Rest/binary>>, Acc) ->
     Payload2 = hybi_unmask(Payload, MaskKey, <<>>),
     parse_hybi_frames(Conn, Rest, [{Opcode, Payload2} | Acc]);
+
 parse_hybi_frames(Conn, <<_Fin:1,
                           _Rsv:3,
                           _Opcode:4,
@@ -227,6 +230,33 @@ parse_hybi_frames(Conn, <<_Fin:1,
                           _PayloadLen:16,
                           _MaskKey:4/binary,
                           _/binary-unit:8>> = PartFrame, Acc) ->
+    receive_more_frames(Conn, PartFrame, Acc);
+
+parse_hybi_frames(Conn, <<_Fin:1,
+                          _Rsv:3,
+                          Opcode:4,
+                          _Mask:1,
+                          127:7,
+                          0:1,
+                          PayloadLen:63,
+                          MaskKey:4/binary,
+                          Payload:PayloadLen/binary-unit:8,
+                          Rest/binary>>, Acc) ->
+    Payload2 = hybi_unmask(Payload, MaskKey, <<>>),
+    parse_hybi_frames(Conn, Rest, [{Opcode, Payload2} | Acc]);
+
+parse_hybi_frames(Conn, <<_Fin:1,
+                          _Rsv:3,
+                          _Opcode:4,
+                          _Mask:1,
+                          127:7,
+                          0:1,
+                          _PayloadLen:63,
+                          _MaskKey:4/binary,
+                          _/binary-unit:8>> = PartFrame, Acc) ->
+    receive_more_frames(Conn, PartFrame, Acc).
+
+receive_more_frames(Conn, PartFrame, Acc) ->
     ok = Conn:setopts([{packet, 0}, {active, once}]),
     receive
         {tcp_closed, _} ->
@@ -250,20 +280,7 @@ parse_hybi_frames(Conn, <<_Fin:1,
         5000 ->
             Conn:close(),
             exit(normal)
-    end;
-
-parse_hybi_frames(Conn, <<_Fin:1,
-                          _Rsv:3,
-                          Opcode:4,
-                          _Mask:1,
-                          127:7,
-                          0:1,
-                          PayloadLen:63,
-                          MaskKey:4/binary,
-                          Payload:PayloadLen/binary-unit:8,
-                          Rest/binary>>, Acc) ->
-    Payload2 = hybi_unmask(Payload, MaskKey, <<>>),
-    parse_hybi_frames(Conn, Rest, [{Opcode, Payload2} | Acc]).
+    end.
 
 %% Unmasks RFC 6455 message
 hybi_unmask(<<O:32, Rest/bits>>, MaskKey, Acc) ->
